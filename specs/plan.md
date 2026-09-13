@@ -997,7 +997,6 @@ This is the safety-critical task: stock consistency, idempotency, and ERP resili
 **Files:**
 - Create: `backend/src/inventory/domain/errors/product-not-found.error.ts`
 - Create: `backend/src/inventory/domain/errors/out-of-stock.error.ts`
-- Modify: `backend/src/shared/presentation/filters/http-exception.filter.ts` — add `PRODUCT_NOT_FOUND`, `OUT_OF_STOCK`, `ORDER_NOT_FOUND` to `DOMAIN_ERROR_STATUS`
 - Modify: `backend/src/app.module.ts` — import `CheckoutModule` and `OrdersModule`
 - Create: `backend/src/orders/domain/order.entity.ts`
 - Create: `backend/src/orders/domain/order.repository.ts`
