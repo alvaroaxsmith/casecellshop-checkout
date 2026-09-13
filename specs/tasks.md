@@ -6,24 +6,24 @@ Checklist derived from [`plan.md`](plan.md).
 
 ## Task 1: Backend scaffold (NestJS + DDD), Inventory domain, and `GET /products`
 
-- [ ] Scaffold the backend package (`npm init`, install NestJS + Jest dependencies)
-- [ ] Write the scripts and Jest unit-test config in `backend/package.json`
-- [ ] Write `backend/tsconfig.json`
-- [ ] Write `backend/tsconfig.build.json`
-- [ ] Write `backend/nest-cli.json`
-- [ ] Write `backend/test/jest-e2e.json`
-- [ ] Write `backend/src/shared/domain/domain-error.ts` and `backend/src/shared/domain/errors/invalid-input.error.ts`
-- [ ] Write `backend/src/shared/presentation/filters/http-exception.filter.ts`
-- [ ] Write `backend/src/bootstrap.ts` (`configureApp`: global `ValidationPipe` + `HttpExceptionFilter`)
-- [ ] Write `backend/src/inventory/domain/product.entity.ts` and `backend/src/inventory/domain/product.repository.ts`
-- [ ] Write `backend/src/inventory/domain/stock-reservation.entity.ts` and `backend/src/inventory/domain/stock-reservation.repository.ts`
-- [ ] Write `backend/src/inventory/domain/stock.service.ts`
-- [ ] Write `backend/src/inventory/infrastructure/in-memory-product.repository.ts` and `backend/src/inventory/infrastructure/in-memory-stock-reservation.repository.ts`
-- [ ] Write `backend/src/inventory/inventory.controller.ts`
-- [ ] Write `backend/src/inventory/inventory.module.ts`, `backend/src/app.module.ts`, and `backend/src/main.ts`
-- [ ] Write `backend/test/utils/create-test-app.ts` and the (failing) e2e test for `GET /products`
-- [ ] Run the test and confirm it fails, then re-run until it passes
-- [ ] Commit
+- [x] Scaffold the backend package (`npm init`, install NestJS + Jest dependencies)
+- [x] Write the scripts and Jest unit-test config in `backend/package.json`
+- [x] Write `backend/tsconfig.json`
+- [x] Write `backend/tsconfig.build.json`
+- [x] Write `backend/nest-cli.json`
+- [x] Write `backend/test/jest-e2e.json`
+- [x] Write `backend/src/shared/domain/domain-error.ts` and `backend/src/shared/domain/errors/invalid-input.error.ts`
+- [x] Write `backend/src/shared/presentation/filters/http-exception.filter.ts`
+- [x] Write `backend/src/bootstrap.ts` (`configureApp`: global `ValidationPipe` + `HttpExceptionFilter`)
+- [x] Write `backend/src/inventory/domain/product.entity.ts` and `backend/src/inventory/domain/product.repository.ts`
+- [x] Write `backend/src/inventory/domain/stock-reservation.entity.ts` and `backend/src/inventory/domain/stock-reservation.repository.ts`
+- [x] Write `backend/src/inventory/domain/stock.service.ts`
+- [x] Write `backend/src/inventory/infrastructure/in-memory-product.repository.ts` and `backend/src/inventory/infrastructure/in-memory-stock-reservation.repository.ts`
+- [x] Write `backend/src/inventory/inventory.controller.ts`
+- [x] Write `backend/src/inventory/inventory.module.ts`, `backend/src/app.module.ts`, and `backend/src/main.ts`
+- [x] Write `backend/test/utils/create-test-app.ts` and the (failing) e2e test for `GET /products`
+- [x] Run the test and confirm it fails, then re-run until it passes
+- [x] Commit
 
 ## Task 2: ERP mock service (`erp-mock/`)
 
