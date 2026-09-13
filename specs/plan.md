@@ -245,6 +245,7 @@ npm install -D @nestjs/cli@^10.4.5 @nestjs/testing@^10.4.0 @types/express@^4.17.
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
