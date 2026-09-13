@@ -27,15 +27,15 @@ Checklist derived from [`plan.md`](plan.md).
 
 ## Task 2: ERP mock service (`erp-mock/`)
 
-- [ ] Scaffold the `erp-mock` package (`npm init`, install Express + Jest/Supertest dependencies)
-- [ ] Write the scripts and Jest config in `erp-mock/package.json`
-- [ ] Write `erp-mock/tsconfig.json`
-- [ ] Write the (failing) test for `POST /erp/orders` and `GET /health` (`erp-mock/test/app.spec.ts`) — one case per simulate mode, one for the delay header, one for the header-less default
-- [ ] Run the test and confirm it fails
-- [ ] Write `erp-mock/src/app.ts` (header-driven `X-Erp-Simulate-Mode`/`X-Erp-Simulate-Delay-Ms`, stateless per request)
-- [ ] Write `erp-mock/src/main.ts`
-- [ ] Run the test and confirm it passes
-- [ ] Commit
+- [x] Scaffold the `erp-mock` package (`npm init`, install Express + Jest/Supertest dependencies)
+- [x] Write the scripts and Jest config in `erp-mock/package.json`
+- [x] Write `erp-mock/tsconfig.json`
+- [x] Write the (failing) test for `POST /erp/orders` and `GET /health` (`erp-mock/test/app.spec.ts`) — one case per simulate mode, one for the delay header, one for the header-less default
+- [x] Run the test and confirm it fails
+- [x] Write `erp-mock/src/app.ts` (header-driven `X-Erp-Simulate-Mode`/`X-Erp-Simulate-Delay-Ms`, stateless per request)
+- [x] Write `erp-mock/src/main.ts`
+- [x] Run the test and confirm it passes
+- [x] Commit
 
 ## Task 3: Checkout core — `POST /checkout` and `GET /orders/:id`
 
