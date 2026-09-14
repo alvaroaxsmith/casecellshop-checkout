@@ -39,7 +39,7 @@ npm run dev
 
 Open `http://localhost:5173`. The frontend's Vite dev server proxies `/api/*` to `http://localhost:3001` (see `frontend/vite.config.ts`), so the browser never talks to the backend's port directly — only through that proxy.
 
-None of the three services need a `.env` file to run with defaults; `PORT` is the only environment variable each one reads, if you need to change a default.
+None of the three services need a `.env` file to run with defaults. `PORT` changes the port for `erp-mock`/`backend`; the backend also reads `ERP_MOCK_URL` (which `erp-mock` to call, default `http://localhost:4000`), and `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` (forwarded as headers to `erp-mock` to force a specific simulated ERP behavior — `always-success`/`always-fail`/`always-timeout`/`random` — instead of the default random behavior). These are how the e2e test suite points the backend at a dedicated test instance of `erp-mock` and drives each scenario deterministically; see `backend/test/global-setup.ts` and `backend/src/erp/infrastructure/http-erp.gateway.ts`.
 
 ## Running the tests
 
@@ -73,7 +73,7 @@ The full reasoning behind every decision below lives in the project's spec-kit d
 
 ### Why `erp-mock` is a separate real HTTP service, not an in-process fake
 
-The backend calls `erp-mock` over an actual network boundary (HTTP, its own process, its own port) instead of simulating ERP behavior with an in-process class. This is a deliberate risk-management choice, not incidental: an in-process fake can't exercise the failure modes that actually matter for this case's resilience criteria — connection resets, a timeout that really has to race the clock (`Promise.race` losing, not just the callee returning an error value), a slow response competing with the backend's own event loop. A real second process is also what forces `erp-mock`'s simulate mode to be **stateless and header-driven** rather than server-side config: two concurrent checkout attempts in the same test run can each demand different simulated behavior (`always-success` vs. `always-timeout`) without racing on shared mutable state, which is exactly the same isolation guarantee the original design got "for free" from reading `process.env` fresh on every call. See `specs/plan.md`'s **Risk Management** section and Task 2's design note in the same file for the full argument.
+The backend calls `erp-mock` over an actual network boundary (HTTP, its own process, its own port) instead of simulating ERP behavior with an in-process class. This is a deliberate risk-management choice, not incidental: an in-process fake can't exercise the failure modes that actually matter for this case's resilience criteria — connection resets, a timeout that really has to race the clock (`Promise.race` losing, not just the callee returning an error value), a slow response competing with the backend's own event loop. A real second process is also what forces `erp-mock`'s simulate mode to be **stateless and header-driven** rather than server-side config: two concurrent checkout attempts in the same test run can each demand different simulated behavior (`always-success` vs. `always-timeout`) without racing on shared mutable state, which is exactly the same isolation guarantee the original design got "for free" from reading `process.env` fresh on every call. See Task 2's design note in `specs/plan.md` for the full argument (the plan's separate **Risk Management** section covers a different, narrower concern: what happens operationally if `erp-mock`'s spawned test process fails to start).
 
 `erp-mock` is explicitly exempt from the project's NestJS/DDD architecture mandate (see `specs/constitution.md`, "Stack and Technologies") — it's a test double standing in for a system outside this project's control, not part of the product being built, so a plain Express service is the honest choice for it.
 
@@ -119,7 +119,7 @@ The exact contract, including every field and status code, is defined in Questio
 
 - [`specs/spec.md`](specs/spec.md) — the full behavioral spec: user stories, implementation decisions, data model, testing decisions, out-of-scope list.
 - [`specs/constitution.md`](specs/constitution.md) — project governance: stack, code guidelines, DDD architecture mandate, testing rules.
-- [`specs/plan.md`](specs/plan.md) — the task-by-task implementation plan, including the "Risk Management" section this README's `erp-mock` reasoning is drawn from.
+- [`specs/plan.md`](specs/plan.md) — the task-by-task implementation plan, including Task 2's design note this README's `erp-mock` reasoning is drawn from.
 - [`Parte 1.A — Perguntas Conceituais.md`](Parte%201.A%20—%20Perguntas%20Conceituais.md) — the conceptual design doc this code implements a slice of (diagnosis, target architecture, concurrency/idempotency reasoning, API contract, testing strategy, AI usage).
 - [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) — the ADRs (ADR-001 through ADR-008) and the before/after risk matrix backing the conceptual answers.
 - [`PROMPTS.md`](PROMPTS.md) — how AI was used to build this project.
