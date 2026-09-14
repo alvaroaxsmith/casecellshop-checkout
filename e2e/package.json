@@ -6,6 +6,8 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
+    "test:erp-lento": "playwright test --config=playwright.erp-lento.config.ts",
+    "test:all": "npm test && npm run test:erp-lento",
     "report": "playwright show-report"
   },
   "devDependencies": {

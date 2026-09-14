@@ -4,14 +4,20 @@
 # dispara curl — não sobe nem derruba nenhum processo.
 #
 # Uso: scripts/scenarios.sh <comando>
-#   products       lista o catálogo com o estoque disponível de cada produto
-#   happy          checkout de 1 unidade, com polling até "confirmed"
-#   out-of-stock   pede mais unidades do que há em estoque
-#   concurrency    dispara N requisições concorrentes pela última unidade
-#   idempotency    reenvia a mesma Idempotency-Key duas vezes
-#   erp-failure    roda um checkout e reporta o desfecho real do ERP
-#   status <id>    consulta um pedido específico
-#   all             roda os cenários acima em sequência
+#   products            lista o catálogo com o estoque disponível de cada produto
+#   happy               checkout de 1 unidade, com polling até "confirmed"
+#   out-of-stock        pede mais unidades do que há em estoque
+#   concurrency         dispara N requisições concorrentes pela última unidade
+#   idempotency         reenvia a mesma Idempotency-Key duas vezes (no body)
+#   idempotency-header  igual, mas mandando a chave no header Idempotency-Key
+#   validation          payloads inválidos (sem productId, quantity fracionária, quantity zero)
+#   not-found           checkout para um productId que não existe
+#   order-not-found     consulta um orderId que não existe
+#   erp-failure         roda um checkout e reporta o desfecho real do ERP
+#   erp-random          3 checkouts em sequência, mostrando a instabilidade do modo random ao vivo
+#   erp-slow            checkout contra um backend em ERP_SIM_MODE=always-timeout (processamento lento de verdade)
+#   status <id>         consulta um pedido específico
+#   all                  roda os cenários acima (exceto erp-slow) em sequência
 #
 #   só nesta branch (redis):
 #   keys                 inspeciona as chaves no redis-cli
@@ -147,6 +153,68 @@ cmd_idempotency() {
   fi
 }
 
+cmd_validation() {
+  header "Validação de entrada — payloads inválidos"
+
+  info "sem productId"
+  do_curl POST /checkout '{"quantity":1,"idempotencyKey":"'"$(unique_key)"'"}'
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  if [ "$RESP_STATUS" = "400" ]; then ok "rejeitado com 400 VALIDATION_ERROR"; else fail "esperava 400, recebi $RESP_STATUS"; fi
+
+  info "quantity não-inteira (1.5)"
+  do_curl POST /checkout '{"productId":"capinha-preta","quantity":1.5,"idempotencyKey":"'"$(unique_key)"'"}'
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  if [ "$RESP_STATUS" = "400" ]; then ok "rejeitado com 400 VALIDATION_ERROR"; else fail "esperava 400, recebi $RESP_STATUS"; fi
+
+  info "quantity zero"
+  do_curl POST /checkout '{"productId":"capinha-preta","quantity":0,"idempotencyKey":"'"$(unique_key)"'"}'
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  if [ "$RESP_STATUS" = "400" ]; then ok "rejeitado com 400 VALIDATION_ERROR"; else fail "esperava 400, recebi $RESP_STATUS"; fi
+}
+
+cmd_not_found() {
+  header "Produto inexistente"
+  do_curl POST /checkout '{"productId":"produto-que-nao-existe","quantity":1,"idempotencyKey":"'"$(unique_key)"'"}'
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  if [ "$RESP_STATUS" = "404" ]; then
+    ok "rejeitado com 404 PRODUCT_NOT_FOUND, como esperado"
+  else
+    fail "esperava 404, recebi $RESP_STATUS"
+  fi
+}
+
+cmd_order_not_found() {
+  header "Pedido inexistente"
+  do_curl GET "/orders/id-que-nao-existe"
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  if [ "$RESP_STATUS" = "404" ]; then
+    ok "rejeitado com 404 ORDER_NOT_FOUND, como esperado"
+  else
+    fail "esperava 404, recebi $RESP_STATUS"
+  fi
+}
+
+cmd_idempotency_header() {
+  header "Idempotência via header Idempotency-Key (em vez do body)"
+  local key
+  key=$(unique_key)
+  do_curl POST /checkout '{"productId":"capinha-transparente","quantity":1}' "Idempotency-Key: ${key}"
+  local first_order
+  first_order=$(json_field "$RESP_BODY" "orderId")
+  info "1ª chamada -> orderId=${first_order} status=${RESP_STATUS}"
+
+  do_curl POST /checkout '{"productId":"capinha-transparente","quantity":1}' "Idempotency-Key: ${key}"
+  local second_order
+  second_order=$(json_field "$RESP_BODY" "orderId")
+  info "2ª chamada -> orderId=${second_order} status=${RESP_STATUS}"
+
+  if [ "$first_order" = "$second_order" ] && [ -n "$first_order" ]; then
+    ok "mesmo orderId nas duas chamadas, mesmo mandando a chave só no header — nenhum pedido duplicado"
+  else
+    fail "orderId diferente entre as duas chamadas — algo está errado"
+  fi
+}
+
 cmd_erp_failure() {
   header "Falha do ERP"
   warn "resultado depende de como o backend foi iniciado: com \"ERP_SIM_MODE=always-fail npm run dev\" o resultado abaixo é garantido; com o \"npm run dev\" padrão (modo random), pode confirmar em vez de falhar."
@@ -172,6 +240,65 @@ cmd_erp_failure() {
     sleep 0.5
   done
   warn "pedido ${order_id} ainda pending depois de 17s"
+}
+
+cmd_erp_random() {
+  header "ERP em modo random — lentidão/instabilidade ao vivo, sem reiniciar nada"
+  info "3 checkouts em sequência contra o modo default (random: delay 500-4000ms, ~80% sucesso) — repare status e duração variando de tentativa pra tentativa"
+  local i
+  for i in 1 2 3; do
+    local key order_id start
+    key=$(unique_key)
+    do_curl POST /checkout '{"productId":"capinha-transparente","quantity":1,"idempotencyKey":"'"$key"'"}'
+    order_id=$(json_field "$RESP_BODY" "orderId")
+    if [ "$RESP_STATUS" != "202" ]; then
+      warn "tentativa ${i}: sem estoque suficiente para continuar (HTTP ${RESP_STATUS}) — rode de novo depois"
+      break
+    fi
+    start=$(date +%s)
+    local j
+    for j in $(seq 1 34); do
+      do_curl GET "/orders/${order_id}"
+      local status
+      status=$(json_field "$RESP_BODY" "status")
+      if [ "$status" != "pending" ]; then
+        echo "  tentativa ${i}: orderId=${order_id} status=${status} duração≈$(( $(date +%s) - start ))s"
+        break
+      fi
+      sleep 0.5
+    done
+  done
+  ok "repare como o desfecho e a duração mudam de tentativa pra tentativa — essa variação É a simulação de lentidão/instabilidade do ERP no modo default"
+}
+
+cmd_erp_slow() {
+  header "ERP sempre lento — modo always-timeout (processamento lento de verdade)"
+  warn "só é determinístico se o backend tiver sido iniciado com \"ERP_SIM_MODE=always-timeout npm run start:dev\" (dentro de backend/) — com o padrão random, pode confirmar rápido em vez de estourar o timeout."
+  local key order_id
+  key=$(unique_key)
+  do_curl POST /checkout '{"productId":"capinha-preta","quantity":1,"idempotencyKey":"'"$key"'"}'
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  order_id=$(json_field "$RESP_BODY" "orderId")
+  info "pedido ${order_id} criado — cada uma das 3 tentativas a seguir é uma chamada HTTP real ao erp-mock perdendo a corrida contra o timeout de 3s do backend (Promise.race), não um erro simulado em memória"
+  info "acompanhe em paralelo o log do backend: procure por \"attempt=\", \"durationMs=\" (~3000) e \"backoffMs=\""
+  local _
+  for _ in $(seq 1 34); do
+    do_curl GET "/orders/${order_id}"
+    local status
+    status=$(json_field "$RESP_BODY" "status")
+    if [ "$status" != "pending" ]; then
+      echo ""
+      print_response "$RESP_BODY" "$RESP_STATUS"
+      if [ "$status" = "failed" ]; then
+        ok "pedido terminou failed/ERP_PROCESSING_FAILED após esgotar as 3 tentativas — a simulação de processamento lento do ERP está funcionando"
+      else
+        warn "pedido terminou '$status' — confira se o backend está mesmo rodando com ERP_SIM_MODE=always-timeout"
+      fi
+      return 0
+    fi
+    sleep 0.5
+  done
+  warn "pedido ${order_id} ainda pending depois de 17s — confira o backend"
 }
 
 cmd_keys() {
@@ -262,9 +389,14 @@ cmd_all() {
   cmd_out_of_stock
   cmd_concurrency
   cmd_idempotency
+  cmd_idempotency_header
+  cmd_validation
+  cmd_not_found
+  cmd_order_not_found
   cmd_erp_failure
+  cmd_erp_random
   header "Fim"
-  ok "todos os cenários rodaram — reveja os resultados acima"
+  ok "todos os cenários rodaram — reveja os resultados acima (erp-slow fica de fora: exige reiniciar o backend com ERP_SIM_MODE=always-timeout, veja o README)"
 }
 
 main() {
@@ -276,7 +408,13 @@ main() {
     out-of-stock) cmd_out_of_stock ;;
     concurrency) cmd_concurrency ;;
     idempotency) cmd_idempotency ;;
+    idempotency-header) cmd_idempotency_header ;;
+    validation) cmd_validation ;;
+    not-found) cmd_not_found ;;
+    order-not-found) cmd_order_not_found ;;
     erp-failure) cmd_erp_failure ;;
+    erp-random) cmd_erp_random ;;
+    erp-slow) cmd_erp_slow ;;
     status) cmd_status "${2:-}" ;;
     keys) cmd_keys ;;
     restart) cmd_restart "${2:-}" "${3:-}" ;;
@@ -285,14 +423,20 @@ main() {
     *)
       echo "Uso: scripts/scenarios.sh <comando>"
       echo ""
-      echo "  products             lista o catálogo com o estoque disponível"
-      echo "  happy                checkout de 1 unidade, com polling até confirmed"
-      echo "  out-of-stock         pede mais unidades do que há em estoque"
-      echo "  concurrency          dispara N requisições concorrentes pela última unidade"
-      echo "  idempotency          reenvia a mesma Idempotency-Key duas vezes"
-      echo "  erp-failure          roda um checkout e reporta o desfecho real"
-      echo "  status <id>          consulta um pedido específico"
-      echo "  all                  roda todos os cenários acima em sequência"
+      echo "  products            lista o catálogo com o estoque disponível"
+      echo "  happy               checkout de 1 unidade, com polling até confirmed"
+      echo "  out-of-stock        pede mais unidades do que há em estoque"
+      echo "  concurrency         dispara N requisições concorrentes pela última unidade"
+      echo "  idempotency         reenvia a mesma Idempotency-Key duas vezes (no body)"
+      echo "  idempotency-header  igual, mas mandando a chave no header Idempotency-Key"
+      echo "  validation          payloads inválidos (sem productId, quantity fracionária, quantity zero)"
+      echo "  not-found           checkout para um productId que não existe"
+      echo "  order-not-found     consulta um orderId que não existe"
+      echo "  erp-failure         roda um checkout e reporta o desfecho real"
+      echo "  erp-random          3 checkouts em sequência, mostrando a instabilidade do modo random ao vivo"
+      echo "  erp-slow            checkout contra um backend em ERP_SIM_MODE=always-timeout (processamento lento de verdade)"
+      echo "  status <id>         consulta um pedido específico"
+      echo "  all                 roda todos os cenários acima (exceto erp-slow) em sequência"
       echo ""
       echo "  só nesta branch (redis):"
       echo "  keys                 inspeciona as chaves order:*/product:stock:*/reservation:* direto no redis-cli"

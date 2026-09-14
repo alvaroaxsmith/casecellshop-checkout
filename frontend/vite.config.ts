@@ -7,7 +7,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:3001",
+        // Configurável via env var para permitir uma segunda instância do
+        // frontend, em outra porta, apontando para um backend isolado (ver
+        // e2e/playwright.erp-lento.config.ts) — o padrão continua o mesmo
+        // de sempre quando a variável não é definida.
+        target: process.env.VITE_BACKEND_URL || "http://localhost:3001",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },

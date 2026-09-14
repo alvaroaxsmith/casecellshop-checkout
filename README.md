@@ -107,7 +107,14 @@ npx playwright install chromium   # só na primeira vez
 npm test
 ```
 
-Diferente das suítes acima, essa não testa uma unidade nem um contrato HTTP isolado — ela sobe `erp-mock`, `backend` e `frontend` como processos reais (via `webServer` do `playwright.config.ts`) e dirige um navegador Chromium contra a UI, cobrindo o caminho feliz, bloqueio por falta de estoque e uma falha simulada do ERP com recuperação. Por isso ela precisa que as portas 4000/3001/5173 estejam livres antes de rodar (encerre qualquer instância manual dos três serviços da seção "Instalação e execução"). Cada execução grava vídeo, screenshot e trace de cada teste em `e2e/test-results/` (git-ignorado); veja `evidencias/` na raiz do repositório para uma amostra já gravada.
+Diferente das suítes acima, essa não testa uma unidade nem um contrato HTTP isolado — ela sobe `erp-mock`, `backend` e `frontend` como processos reais (via `webServer` do `playwright.config.ts`) e dirige um navegador Chromium contra a UI, cobrindo o caminho feliz, bloqueio por falta de estoque, duplo clique, validação de entrada e uma falha simulada do ERP com recuperação. Por isso ela precisa que as portas 4000/3001/5173 estejam livres antes de rodar (encerre qualquer instância manual dos três serviços da seção "Instalação e execução"). Cada execução grava vídeo, screenshot e trace de cada teste em `e2e/test-results/` (git-ignorado); veja `evidencias/` na raiz do repositório para uma amostra já gravada.
+
+Existe ainda uma segunda config, isolada, dedicada a exercitar o modo `always-timeout` do ERP de verdade (não simulado no navegador) — veja [a seção sobre a simulação de lentidão/instabilidade do ERP](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) logo abaixo:
+
+```bash
+npm run test:erp-lento   # dentro de e2e/ — sobe um segundo trio de serviços, em portas próprias
+npm run test:all         # roda as duas suítes Playwright em sequência
+```
 
 Nesta branch, o backend do `webServer` roda com `REDIS_URL` apontando para um DB lógico dedicado (`redis://localhost:6379/2`, separado do `0` usado por `npm run dev` e do `1` usado pelos testes e2e do `backend/`), limpo automaticamente por um `globalSetup` (`e2e/global-setup.ts`) antes de cada execução — sem isso, o teste que espera "10 em estoque" no início falharia depois da primeira vez que alguém rodasse a suíte, porque o Redis (ao contrário do `Map` em memória de `main`) lembra o estoque entre execuções.
 
@@ -116,7 +123,7 @@ Nesta branch, o backend do `webServer` roda com `REDIS_URL` apontando para um DB
 Com os três serviços de pé (`npm run dev`, numa aba separada), `scripts/scenarios.sh` dispara cenários reais contra a API via `curl`, com saída legível — útil pra explorar o comportamento na mão sem escrever `curl` a cada vez:
 
 ```bash
-scripts/scenarios.sh all   # roda todos os cenários abaixo em sequência
+scripts/scenarios.sh all   # roda todos os cenários abaixo (exceto erp-slow) em sequência
 ```
 
 | Comando | O que faz |
@@ -125,8 +132,14 @@ scripts/scenarios.sh all   # roda todos os cenários abaixo em sequência
 | `happy` | Checkout de 1 unidade, com polling até `confirmed` |
 | `out-of-stock` | Pede mais unidades do que há em estoque disponível |
 | `concurrency` | Dispara `estoque+1` requisições concorrentes pela última unidade, conta `202` vs. `409` |
-| `idempotency` | Duas chamadas com a mesma `Idempotency-Key`, confirma que é o mesmo `orderId` |
+| `idempotency` | Duas chamadas com a mesma `Idempotency-Key` no body, confirma que é o mesmo `orderId` |
+| `idempotency-header` | O mesmo, mas mandando a chave no header `Idempotency-Key` em vez do body |
+| `validation` | Três payloads inválidos (sem `productId`, `quantity` fracionária, `quantity` zero) → `400 VALIDATION_ERROR` |
+| `not-found` | Checkout para um `productId` que não existe → `404 PRODUCT_NOT_FOUND` |
+| `order-not-found` | Consulta um `orderId` que não existe → `404 ORDER_NOT_FOUND` |
 | `erp-failure` | Roda um checkout e reporta o desfecho real do ERP |
+| `erp-random` | 3 checkouts em sequência contra o modo `random` padrão, mostrando status e duração variando de tentativa pra tentativa |
+| `erp-slow` | Checkout contra um backend iniciado com `ERP_SIM_MODE=always-timeout` — processamento lento de verdade, não simulado (ver seção abaixo) |
 | `status <orderId>` | Consulta um pedido específico |
 
 O cenário `erp-failure` só é determinístico se o backend tiver sido iniciado com `ERP_SIM_MODE=always-fail npm run dev` (ver "Instalação e execução" acima) — com o modo `random` padrão, o script avisa isso na tela e reporta o que aconteceu de verdade. O script não sobe nem derruba nenhum processo — só assume que `npm run dev` já está rodando em outra aba.
@@ -138,6 +151,54 @@ Só nesta branch, mais três comandos que exercitam o que o Redis muda de verdad
 | `keys` | Inspeciona `order:*`, `product:stock:*`, `reservation:*` direto no `redis-cli`, sem passar pela API |
 | `restart before` / `restart after <orderId>` | `before` cria um pedido e pede pra você reiniciar o backend manualmente (Ctrl+C + `npm run dev` de novo); `after` confirma que o pedido e o estoque sobreviveram — de propósito não é automático, já que derrubar o processo que você está olhando rodar em outro terminal não é algo que este script deveria fazer sozinho |
 | `ttl` | Demo isolada do TTL nativo (`SET ... EX 3`) mostrando uma reserva sumir sozinha do Redis, sem nenhum código da aplicação envolvido |
+
+## Demonstrando a simulação de lentidão/instabilidade do ERP
+
+Esse é um pré-requisito explícito do case, então aqui vai o passo a passo direto, sem precisar ler o código pra confirmar:
+
+O `erp-mock` (`erp-mock/src/app.ts`, endpoint `POST /erp/orders`) simula quatro modos, escolhidos pelo header `X-Erp-Simulate-Mode` que o backend envia em toda chamada — o backend, por sua vez, decide qual mandar a partir das variáveis de ambiente `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` com que foi iniciado:
+
+| Modo | Comportamento no `erp-mock` |
+|---|---|
+| `random` (padrão, sem configurar nada) | Delay aleatório de 500–4000ms + ~80% de chance de sucesso — mistura lentidão e instabilidade organicamente, do jeito que um ERP real se comportaria |
+| `always-timeout` | Dorme 10s antes de responder — **sempre** mais que o timeout de 3s que o backend usa (`Promise.race` em `checkout.service.ts`), então o backend sempre perde a corrida contra o relógio: é "processamento lento" no sentido mais literal do requisito |
+| `always-fail` | Responde rápido, mas com `success: false` — falha determinística sem lentidão, para isolar o caso de "instabilidade" do caso de "lentidão" |
+| `always-success` | Responde rápido com `success: true` — usado pelos cenários de caminho feliz, pra eles não dependerem de sorte |
+
+O backend tenta até 3 vezes, com timeout de 3s por tentativa e backoff de 1s/2s entre elas (`CheckoutService.settleWithErp`) — o pedido só é marcado `failed`/`ERP_PROCESSING_FAILED` depois de esgotar as três. Três formas de ver isso rodando, da mais rápida pra mais completa:
+
+**1. Automatizado, sem nenhum passo manual — o que a captura abaixo mostra:**
+
+```bash
+cd e2e
+npm run test:erp-lento
+```
+
+Isso sobe um segundo trio `erp-mock`+`backend`+`frontend` (portas 4001/3002/5174, isolado da suíte principal) com o backend em `ERP_SIM_MODE=always-timeout`, e dirige um navegador de verdade contra ele — sem `page.route()` nenhum fingindo a resposta: é o `Promise.race` real do backend perdendo contra o `erp-mock` real, três vezes, até a UI mostrar a mensagem de falha.
+
+![Pedido falhando após 3 tentativas reais contra um ERP que nunca responde a tempo](evidencias/06-erp-lento-timeout-real.gif)
+
+**2. Manual, via `scripts/scenarios.sh`:**
+
+```bash
+# terminal 1
+cd backend && ERP_SIM_MODE=always-timeout npm run start:dev
+
+# terminal 2 (erp-mock e frontend já de pé como de costume)
+scripts/scenarios.sh erp-slow
+```
+
+O script acompanha o pedido até ele terminar `failed`, e aponta exatamente o que procurar no log do backend (`attempt=`, `durationMs=` próximo de 3000, `backoffMs=`).
+
+**3. Sem reiniciar nada — o modo `random` padrão já demonstra a instabilidade ao vivo:**
+
+```bash
+scripts/scenarios.sh erp-random
+```
+
+Dispara 3 checkouts seguidos contra o backend já rodando do jeito padrão e mostra status/duração de cada um lado a lado — a variação entre eles **é** a simulação.
+
+Uma captura real de terminal cobrindo `ERP_SIM_MODE=always-success` e `always-fail` está em [`evidencias/logs-backend.md`](evidencias/logs-backend.md), comentada trecho a trecho.
 
 ## Arquitetura e principais decisões técnicas
 
@@ -241,15 +302,21 @@ O contrato exato, incluindo cada campo e código de status, está detalhado em [
 
 ## Evidências e testes automatizados
 
-A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`) de uma execução real da suíte `e2e/`, uma por cenário:
+A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bruto) de uma execução real da suíte `e2e/`, uma por cenário; os três mais recentes também têm uma versão `.gif` embutida aqui, pra não precisar baixar nada pra ver o resultado:
 
 | Cenário | Arquivo | Resultado |
 |---|---|---|
 | Caminho feliz | [`01-caminho-feliz.webm`](evidencias/01-caminho-feliz.webm) | Seleciona um produto, confirma a compra, o polling chega em "Compra confirmada!" contra o backend real (ERP simulado forçado a sempre ter sucesso), estoque exibido no card cai de 10 para 9 sem reload |
 | Estoque insuficiente | [`02-estoque-insuficiente.webm`](evidencias/02-estoque-insuficiente.webm) | Pede mais unidades do que há em estoque numa única tentativa; backend rejeita antes de reservar qualquer coisa, UI mostra "Este produto está esgotado no momento." |
 | Falha do ERP e retry | [`03-falha-erp-e-retry.webm`](evidencias/03-falha-erp-e-retry.webm) | Primeira tentativa falha (interceptação de rede do navegador, sem alterar código da aplicação), UI mostra a mensagem de falha temporária; segunda tentativa, sem interceptação, recupera normalmente |
+| Duplo clique bloqueado | [`04-duplo-clique-bloqueado.webm`](evidencias/04-duplo-clique-bloqueado.webm) | Botão "Comprar" vira "Processando..." e fica desabilitado assim que clicado — antes mesmo do pedido terminar |
+| Validação de quantidade inválida | [`05-validacao-quantidade-invalida.webm`](evidencias/05-validacao-quantidade-invalida.webm) | `quantity=0` enviado de verdade ao backend (sem bloqueio no front), volta `400` e a UI mostra a mensagem exata da validação |
+| ERP lento (real) | [`06-erp-lento-timeout-real.webm`](evidencias/06-erp-lento-timeout-real.webm) | Ver a [seção dedicada acima](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) — 3 tentativas reais perdendo a corrida contra o timeout, sem nenhuma simulação no navegador |
 
-Essas gravações não substituem a suíte automatizada — são uma amostra point-in-time de uma execução; a fonte da verdade é sempre rodar `npm test` em `e2e/` (ou as suítes unitárias/e2e de cada pacote, na seção anterior).
+![Botão desabilita imediatamente ao clicar em Comprar](evidencias/04-duplo-clique-bloqueado.gif)
+![Mensagem de validação para quantidade zero](evidencias/05-validacao-quantidade-invalida.gif)
+
+Essas gravações não substituem a suíte automatizada — são uma amostra point-in-time de uma execução; a fonte da verdade é sempre rodar `npm test`/`npm run test:erp-lento` em `e2e/` (ou as suítes unitárias/e2e de cada pacote, na seção anterior).
 
 [`evidencias/logs-backend.md`](evidencias/logs-backend.md) complementa isso do lado do backend: captura real do terminal rodando o backend duas vezes (`ERP_SIM_MODE=always-success` e `always-fail`) e disparando `curl` contra cada cenário, comentada trecho a trecho.
 
