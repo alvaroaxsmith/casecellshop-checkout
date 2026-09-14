@@ -306,3 +306,107 @@
 [32m[Nest] 63877  - [39m14/09/2026, 19:14:57 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=f7b457ae ip=::1[39m
 [32m[Nest] 63877  - [39m14/09/2026, 19:14:57 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=f7b457ae status=200 durationMs=0.6[39m
 [95m[Nest] 63877  - [39m14/09/2026, 19:15:00 [95m  DEBUG[39m [38;5;3m[ErpService] [39m[95merp-mock respondeu — httpStatus=200 success=true durationMs=10004[39m
+
+================================================================================
+== BLOCO 4 — backend iniciado com ERP_SIM_MODE=always-http-error
+================================================================================
+
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> POST /checkout requestId=7fbec0c8 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mCheckout recebido — requestId=7fbec0c8 productId=capinha-preta quantity=1 idempotencyKey=manual-1789429782-19749[39m
+[95m[Nest] 74098  - [39m14/09/2026, 20:49:42 [95m  DEBUG[39m [38;5;3m[IdempotencyService] [39m[95mConsulta de idempotência — idempotencyKey=manual-1789429782-19749 result=miss[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[OrdersService] [39m[32mPedido criado — orderId=ord_000001 productId=capinha-preta quantity=1 status=pending[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[ProductsService] [39m[32mEstoque reservado — orderId=ord_000001 productId=capinha-preta quantity=1 remainingAvailable=4 ttlMs=120000[39m
+[95m[Nest] 74098  - [39m14/09/2026, 20:49:42 [95m  DEBUG[39m [38;5;3m[IdempotencyService] [39m[95mResposta de sucesso armazenada — idempotencyKey=manual-1789429782-19749 orderId=ord_000001[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mCheckout aceito, status=pending; liquidação com o ERP inicia em segundo plano — orderId=ord_000001 requestId=7fbec0c8 productId=capinha-preta quantity=1 idempotencyKey=manual-1789429782-19749[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mChamando o ERP — orderId=ord_000001 attempt=1/3 timeoutMs=3000[39m
+[95m[Nest] 74098  - [39m14/09/2026, 20:49:42 [95m  DEBUG[39m [38;5;3m[ErpService] [39m[95mChamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-http-error[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- POST /checkout requestId=7fbec0c8 status=202 durationMs=3.0[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=deb0cce1 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=deb0cce1 status=200 durationMs=0.4[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=db27b339 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=db27b339 status=200 durationMs=0.6[39m
+[33m[Nest] 74098  - [39m14/09/2026, 20:49:42 [33m   WARN[39m [38;5;3m[ErpService] [39m[33merp-mock respondeu com erro, tratando como falha — httpStatus=503 durationMs=693[39m
+[33m[Nest] 74098  - [39m14/09/2026, 20:49:42 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mTentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=1/3[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:42 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mAguardando antes da próxima tentativa — orderId=ord_000001 backoffMs=1000[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:43 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=d2f82fb2 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:43 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=d2f82fb2 status=200 durationMs=0.4[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:43 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mChamando o ERP — orderId=ord_000001 attempt=2/3 timeoutMs=3000[39m
+[95m[Nest] 74098  - [39m14/09/2026, 20:49:43 [95m  DEBUG[39m [38;5;3m[ErpService] [39m[95mChamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-http-error[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:43 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=0ba38036 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:43 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=0ba38036 status=200 durationMs=0.6[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:44 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=a4fac2c8 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:44 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=a4fac2c8 status=200 durationMs=0.5[39m
+[33m[Nest] 74098  - [39m14/09/2026, 20:49:44 [33m   WARN[39m [38;5;3m[ErpService] [39m[33merp-mock respondeu com erro, tratando como falha — httpStatus=503 durationMs=783[39m
+[33m[Nest] 74098  - [39m14/09/2026, 20:49:44 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mTentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=2/3[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:44 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mAguardando antes da próxima tentativa — orderId=ord_000001 backoffMs=2000[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:45 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=3ef34322 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:45 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=3ef34322 status=200 durationMs=0.7[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:45 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=e1fab8a7 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:45 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=e1fab8a7 status=200 durationMs=0.4[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:46 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=f3b4a609 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:46 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=f3b4a609 status=200 durationMs=0.5[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:46 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mChamando o ERP — orderId=ord_000001 attempt=3/3 timeoutMs=3000[39m
+[95m[Nest] 74098  - [39m14/09/2026, 20:49:46 [95m  DEBUG[39m [38;5;3m[ErpService] [39m[95mChamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-http-error[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:46 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=dbfd7bf0 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:46 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=dbfd7bf0 status=200 durationMs=0.3[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:47 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=9d095e39 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:47 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=9d095e39 status=200 durationMs=0.4[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:47 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=039cf58c ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:47 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=039cf58c status=200 durationMs=0.4[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:48 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=25881986 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:48 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=25881986 status=200 durationMs=0.7[39m
+[33m[Nest] 74098  - [39m14/09/2026, 20:49:48 [33m   WARN[39m [38;5;3m[ErpService] [39m[33merp-mock respondeu com erro, tratando como falha — httpStatus=503 durationMs=1987[39m
+[33m[Nest] 74098  - [39m14/09/2026, 20:49:48 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mTentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=3/3[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:48 [32m    LOG[39m [38;5;3m[ProductsService] [39m[32mReserva liberada, estoque volta a ficar disponível — orderId=ord_000001 productId=capinha-preta quantity=1[39m
+[33m[Nest] 74098  - [39m14/09/2026, 20:49:48 [33m   WARN[39m [38;5;3m[OrdersService] [39m[33mPedido marcado como failed — orderId=ord_000001 status=failed errorCode=ERP_PROCESSING_FAILED errorMessage="Não conseguimos concluir seu pedido agora. Tente novamente em instantes."[39m
+[31m[Nest] 74098  - [39m14/09/2026, 20:49:48 [31m  ERROR[39m [38;5;3m[CheckoutService] [39m[31mPedido falhou definitivamente após esgotar as tentativas; estoque liberado — orderId=ord_000001 attempts=3[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:48 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=731f71f5 ip=::1[39m
+[32m[Nest] 74098  - [39m14/09/2026, 20:49:48 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=731f71f5 status=200 durationMs=0.3[39m
+{"orderId":"ord_000001","status":"pending","statusUrl":"/orders/ord_000001"}
+{"orderId":"ord_000001","status":"failed","error":{"code":"ERP_PROCESSING_FAILED","message":"Não conseguimos concluir seu pedido agora. Tente novamente em instantes."}}
+
+================================================================================
+== BLOCO 5 — backend iniciado com ERP_SIM_MODE=always-reset
+================================================================================
+
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> POST /checkout requestId=a7d582e9 ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mCheckout recebido — requestId=a7d582e9 productId=capinha-preta quantity=1 idempotencyKey=manual-1789429851-27425[39m
+[95m[Nest] 74624  - [39m14/09/2026, 20:50:51 [95m  DEBUG[39m [38;5;3m[IdempotencyService] [39m[95mConsulta de idempotência — idempotencyKey=manual-1789429851-27425 result=miss[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[OrdersService] [39m[32mPedido criado — orderId=ord_000001 productId=capinha-preta quantity=1 status=pending[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[ProductsService] [39m[32mEstoque reservado — orderId=ord_000001 productId=capinha-preta quantity=1 remainingAvailable=4 ttlMs=120000[39m
+[95m[Nest] 74624  - [39m14/09/2026, 20:50:51 [95m  DEBUG[39m [38;5;3m[IdempotencyService] [39m[95mResposta de sucesso armazenada — idempotencyKey=manual-1789429851-27425 orderId=ord_000001[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mCheckout aceito, status=pending; liquidação com o ERP inicia em segundo plano — orderId=ord_000001 requestId=a7d582e9 productId=capinha-preta quantity=1 idempotencyKey=manual-1789429851-27425[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mChamando o ERP — orderId=ord_000001 attempt=1/3 timeoutMs=3000[39m
+[95m[Nest] 74624  - [39m14/09/2026, 20:50:51 [95m  DEBUG[39m [38;5;3m[ErpService] [39m[95mChamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-reset[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- POST /checkout requestId=a7d582e9 status=202 durationMs=2.4[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=2490f118 ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=2490f118 status=200 durationMs=0.4[39m
+[33m[Nest] 74624  - [39m14/09/2026, 20:50:51 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mChamada ao ERP rejeitou (tratada como falha desta tentativa) — orderId=ord_000001 attempt=1/3 reason=fetch failed[39m
+[33m[Nest] 74624  - [39m14/09/2026, 20:50:51 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mTentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=1/3[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:51 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mAguardando antes da próxima tentativa — orderId=ord_000001 backoffMs=1000[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:52 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=f3045e30 ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:52 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=f3045e30 status=200 durationMs=0.5[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:52 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mChamando o ERP — orderId=ord_000001 attempt=2/3 timeoutMs=3000[39m
+[95m[Nest] 74624  - [39m14/09/2026, 20:50:52 [95m  DEBUG[39m [38;5;3m[ErpService] [39m[95mChamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-reset[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:52 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=620a499e ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:52 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=620a499e status=200 durationMs=0.4[39m
+[33m[Nest] 74624  - [39m14/09/2026, 20:50:52 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mChamada ao ERP rejeitou (tratada como falha desta tentativa) — orderId=ord_000001 attempt=2/3 reason=fetch failed[39m
+[33m[Nest] 74624  - [39m14/09/2026, 20:50:52 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mTentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=2/3[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:52 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mAguardando antes da próxima tentativa — orderId=ord_000001 backoffMs=2000[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:53 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=e6a9af94 ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:53 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=e6a9af94 status=200 durationMs=0.5[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:53 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=ed4e5dc1 ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:53 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=ed4e5dc1 status=200 durationMs=0.4[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:54 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=4aed851b ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:54 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=4aed851b status=200 durationMs=0.4[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:54 [32m    LOG[39m [38;5;3m[CheckoutService] [39m[32mChamando o ERP — orderId=ord_000001 attempt=3/3 timeoutMs=3000[39m
+[95m[Nest] 74624  - [39m14/09/2026, 20:50:54 [95m  DEBUG[39m [38;5;3m[ErpService] [39m[95mChamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-reset[39m
+[33m[Nest] 74624  - [39m14/09/2026, 20:50:54 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mChamada ao ERP rejeitou (tratada como falha desta tentativa) — orderId=ord_000001 attempt=3/3 reason=fetch failed[39m
+[33m[Nest] 74624  - [39m14/09/2026, 20:50:54 [33m   WARN[39m [38;5;3m[CheckoutService] [39m[33mTentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=3/3[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:54 [32m    LOG[39m [38;5;3m[ProductsService] [39m[32mReserva liberada, estoque volta a ficar disponível — orderId=ord_000001 productId=capinha-preta quantity=1[39m
+[33m[Nest] 74624  - [39m14/09/2026, 20:50:54 [33m   WARN[39m [38;5;3m[OrdersService] [39m[33mPedido marcado como failed — orderId=ord_000001 status=failed errorCode=ERP_PROCESSING_FAILED errorMessage="Não conseguimos concluir seu pedido agora. Tente novamente em instantes."[39m
+[31m[Nest] 74624  - [39m14/09/2026, 20:50:54 [31m  ERROR[39m [38;5;3m[CheckoutService] [39m[31mPedido falhou definitivamente após esgotar as tentativas; estoque liberado — orderId=ord_000001 attempts=3[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:54 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m--> GET /orders/ord_000001 requestId=a50ca8c1 ip=::1[39m
+[32m[Nest] 74624  - [39m14/09/2026, 20:50:54 [32m    LOG[39m [38;5;3m[HTTP] [39m[32m<-- GET /orders/ord_000001 requestId=a50ca8c1 status=200 durationMs=0.4[39m
+{"orderId":"ord_000001","status":"pending","statusUrl":"/orders/ord_000001"}
+{"orderId":"ord_000001","status":"failed","error":{"code":"ERP_PROCESSING_FAILED","message":"Não conseguimos concluir seu pedido agora. Tente novamente em instantes."}}

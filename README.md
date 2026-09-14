@@ -87,7 +87,7 @@ A API do backend tem documentação interativa (Swagger/OpenAPI) em `http://loca
 |---|---|---|---|
 | `PORT` | `erp-mock`/`backend` | `4000`/`3001` | Muda a porta do serviço |
 | `ERP_MOCK_URL` | `backend` | `http://localhost:4000` | URL da instância de `erp-mock` a ser chamada |
-| `ERP_SIM_MODE` | `backend` | `random` | Repassada como header para o `erp-mock`, força um comportamento simulado específico — `always-success` / `always-fail` / `always-timeout` / `random` |
+| `ERP_SIM_MODE` | `backend` | `random` | Repassada como header para o `erp-mock`, força um comportamento simulado específico — `always-success` / `always-fail` / `always-timeout` / `always-http-error` / `always-reset` / `random` |
 | `ERP_SIM_DELAY_MS` | `backend` | — | Idem, força um delay específico em vez do aleatório |
 
 É assim que a suíte de testes e2e aponta o backend para uma instância de teste dedicada do `erp-mock` e conduz cada cenário de forma determinística; veja `backend/test/global-setup.ts` e `backend/src/erp/erp.service.ts`.
@@ -168,7 +168,7 @@ npm run test:all         # roda as duas suítes Playwright em sequência
 Com os três serviços de pé (`npm run dev`, numa aba separada), `scripts/scenarios.sh` dispara cenários reais contra a API via `curl`, com saída legível — útil pra explorar o comportamento na mão sem escrever `curl` a cada vez:
 
 ```bash
-scripts/scenarios.sh all   # roda todos os cenários abaixo (exceto erp-slow) em sequência
+scripts/scenarios.sh all   # roda todos os cenários abaixo (exceto erp-slow/erp-http-error/erp-reset) em sequência
 ```
 
 | Comando | O que faz |
@@ -185,6 +185,8 @@ scripts/scenarios.sh all   # roda todos os cenários abaixo (exceto erp-slow) em
 | `erp-failure` | Roda um checkout e reporta o desfecho real do ERP |
 | `erp-random` | 3 checkouts em sequência contra o modo `random` padrão, mostrando status e duração variando de tentativa pra tentativa |
 | `erp-slow` | Checkout contra um backend iniciado com `ERP_SIM_MODE=always-timeout` — processamento lento de verdade, não simulado (ver seção abaixo) |
+| `erp-http-error` | Checkout contra um backend iniciado com `ERP_SIM_MODE=always-http-error` — o `erp-mock` responde com um `503` real, não simulado |
+| `erp-reset` | Checkout contra um backend iniciado com `ERP_SIM_MODE=always-reset` — o `erp-mock` derruba a conexão de verdade (`req.socket.destroy()`), sem responder nada |
 | `status <orderId>` | Consulta um pedido específico |
 
 > **Nota:** o cenário `erp-failure` só é determinístico se o backend tiver sido iniciado com `ERP_SIM_MODE=always-fail npm run dev` (ver ["Como rodar"](#como-rodar) acima) — com o modo `random` padrão, o script avisa isso na tela e reporta o que aconteceu de verdade. O script não sobe nem derruba nenhum processo — só assume que `npm run dev` já está rodando em outra aba.
@@ -195,13 +197,15 @@ scripts/scenarios.sh all   # roda todos os cenários abaixo (exceto erp-slow) em
 
 Esse é um pré-requisito explícito do case, então aqui vai o passo a passo direto:
 
-O `erp-mock` (`erp-mock/src/app.ts`, endpoint `POST /erp/orders`) simula quatro modos, escolhidos pelo header `X-Erp-Simulate-Mode` que o backend envia em toda chamada — o backend, por sua vez, decide qual mandar a partir das variáveis de ambiente `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` com que foi iniciado:
+O `erp-mock` (`erp-mock/src/app.ts`, endpoint `POST /erp/orders`) simula seis modos, escolhidos pelo header `X-Erp-Simulate-Mode` que o backend envia em toda chamada — o backend, por sua vez, decide qual mandar a partir das variáveis de ambiente `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` com que foi iniciado:
 
 | Modo | Comportamento no `erp-mock` |
 |---|---|
 | `random` (padrão, sem configurar nada) | Delay aleatório de 500–4000ms + ~80% de chance de sucesso — mistura lentidão e instabilidade organicamente, do jeito que um ERP real se comportaria |
 | `always-timeout` | Dorme 10s antes de responder — **sempre** mais que o timeout de 3s que o backend usa (`Promise.race` em `checkout.service.ts`), então o backend sempre perde a corrida contra o relógio: é "processamento lento" no sentido mais literal do requisito |
-| `always-fail` | Responde rápido, mas com `success: false` — falha determinística sem lentidão, para isolar o caso de "instabilidade" do caso de "lentidão" |
+| `always-fail` | Responde rápido, mas com `success: false` num `200` — falha determinística sem lentidão, para isolar o caso de "instabilidade" do caso de "lentidão" |
+| `always-http-error` | Responde com um `503` real (não um `200` com `success: false`) — exercita o `if (!res.ok)` de `ErpService.call`/`fetchCatalog` contra o `erp-mock` de verdade |
+| `always-reset` | Derruba a conexão (`req.socket.destroy()`) sem responder nada — o `fetch()` do backend **rejeita**, em vez de resolver com um status de erro; exercita o `try/catch` de `CheckoutService.settleWithErp` |
 | `always-success` | Responde rápido com `success: true` — usado pelos cenários de caminho feliz, pra eles não dependerem de sorte |
 
 O backend tenta até 3 vezes, com timeout de 3s por tentativa e backoff de 1s/2s entre elas (`CheckoutService.settleWithErp`) — o pedido só é marcado `failed`/`ERP_PROCESSING_FAILED` depois de esgotar as três. Três formas de ver isso rodando, da mais rápida pra mais completa:
@@ -253,6 +257,18 @@ Dispara 3 checkouts seguidos contra o backend já rodando do jeito padrão e mos
 
 Captura real de terminal cobrindo os três modos (`always-success`, `always-fail`, `always-timeout`) está em [`evidencias/logs-backend.md`](evidencias/logs-backend.md), comentada trecho a trecho.
 
+#### 4. Dois modos de instabilidade adicionais — `always-http-error` e `always-reset`
+
+```bash
+# terminal 1
+cd backend && ERP_SIM_MODE=always-http-error npm run start:dev   # ou always-reset
+
+# terminal 2
+scripts/scenarios.sh erp-http-error   # ou: scripts/scenarios.sh erp-reset
+```
+
+`always-timeout`/`always-fail` cobrem lentidão e uma resposta negativa; estes dois cobrem os dois jeitos restantes de um HTTP real falhar — um status de erro (`503`) e uma conexão derrubada — cada um batendo num branch de código diferente em `ErpService`/`CheckoutService` (detalhes na seção ["Limitações desta simulação"](#por-que-erp-mock-é-um-serviço-http-real-separado-e-não-uma-simulação-in-process) mais abaixo). Também cobertos por dois testes e2e reais contra o `erp-mock` de verdade (`backend/test/checkout.e2e-spec.ts`), não só pelo script manual. Captura de log de ambos em [`evidencias/logs-backend.md`, seções 12 e 13](evidencias/logs-backend.md#12-erp-responde-com-status-http-de-erro-real-always-http-error).
+
 ---
 
 ## Arquitetura e principais decisões técnicas
@@ -283,10 +299,10 @@ O `erp-mock` é um serviço Express simples, e não uma segunda aplicação Nest
 
 **Limitações desta simulação — sendo honesto sobre os trade-offs:**
 
-- `erp-mock` sempre responde HTTP `200`, em todo modo (`erp-mock/src/app.ts`) — nunca um status de erro real (`500`/`503`) nem uma conexão derrubada de propósito. O código que trata essa situação (`ErpService.fetchCatalog` lança se a resposta não for `ok`; `ErpService.call` trata como falha) só é exercitado com `fetch` mockado em `erp.service.spec.ts` — o próprio comentário desse arquivo admite que **nunca** é exercitado contra o `erp-mock` rodando de verdade.
-- `always-timeout` simula lentidão (demora 10s, sempre mais que o timeout de 3s do backend) — a resposta chega, só chega tarde demais para importar (ver a [seção de ERP lento](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp)). Isso **não** é um reset de conexão real (nenhum `socket.destroy()`/conexão abortada) — a arquitetura de processo separado torna isso possível de adicionar, ao contrário de uma simulação in-process, mas hoje não está implementado.
-- Os dois processos rodam em `localhost` — sem a latência, perda de pacote, DNS ou negociação TLS de uma rede real. A fronteira HTTP é real; as condições de rede de produção, não.
-- O modo `random` usa `Math.random()` sem seed — realista para uma demonstração, mas não reproduzível fora dos modos determinísticos por header (`always-*`).
+- Os dois processos rodam em `localhost` — sem a latência, perda de pacote, DNS ou negociação TLS de uma rede real. A fronteira HTTP é real; as condições de rede de produção, não. Simular isso de verdade (`tc`/`netem`, proxy com latência injetada) foi considerado fora de escopo deliberadamente: infraestrutura desproporcional para um mini-projeto, e tende a deixar a suíte de testes flaky em vez de mais fiel.
+- O modo `random` usa `Math.random()` sem seed — realista para uma demonstração, mas não reproduzível fora dos modos determinísticos por header (`always-*`). Não seedado de propósito: os modos determinísticos já servem exatamente esse propósito onde reprodutibilidade importa (testes automatizados nunca usam `random`), então seedar só adicionaria complexidade sem ganho real.
+
+Duas limitações que existiam aqui foram fechadas depois de identificadas: `erp-mock` só respondia HTTP `200` em todo modo, então o `if (!res.ok)` de `ErpService.call`/`fetchCatalog` nunca era exercitado contra o serviço real — hoje o modo `always-http-error` responde com um `503` de verdade. E `always-timeout` só simulava lentidão, nunca um reset de conexão — hoje o modo `always-reset` derruba o socket com `req.socket.destroy()`, fazendo o `fetch()` do backend rejeitar de verdade em vez de só resolver com `success: false`. Os dois têm teste e2e contra o `erp-mock` real (`backend/test/checkout.e2e-spec.ts`) e evidência de log capturada (ver a [seção 4 acima](#4-dois-modos-de-instabilidade-adicionais--always-http-error-e-always-reset)).
 
 Nada disso invalida o que a simulação prova de fato (timeout real vencendo a corrida contra o relógio, isolamento entre chamadas concorrentes) — mas `erp-mock` continua sendo um dublê simplificado, não um cliente HTTP resiliente completo, e vale listar onde a fidelidade termina em vez de deixar a evidência parecer mais completa do que é.
 

@@ -48,6 +48,23 @@ describe("POST /erp/orders", () => {
     const res = await request(app).post("/erp/orders").set("X-Erp-Simulate-Delay-Ms", "10").send({});
     expect(typeof res.body.success).toBe("boolean");
   });
+
+  it("returns a real non-2xx status when mode is always-http-error", async () => {
+    const res = await request(app)
+      .post("/erp/orders")
+      .set("X-Erp-Simulate-Mode", "always-http-error")
+      .set("X-Erp-Simulate-Delay-Ms", "10")
+      .send({});
+
+    expect(res.status).toBe(503);
+    expect(res.body.success).toBe(false);
+  });
+
+  it("drops the connection instead of responding when mode is always-reset", async () => {
+    await expect(
+      request(app).post("/erp/orders").set("X-Erp-Simulate-Mode", "always-reset").set("X-Erp-Simulate-Delay-Ms", "10").send({}),
+    ).rejects.toThrow();
+  });
 });
 
 describe("GET /health", () => {

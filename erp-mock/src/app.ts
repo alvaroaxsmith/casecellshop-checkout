@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 
-type SimulateMode = "always-success" | "always-fail" | "always-timeout" | "random";
+type SimulateMode = "always-success" | "always-fail" | "always-timeout" | "always-http-error" | "always-reset" | "random";
 
 // Catálogo do ERP: produto, preço e estoque contábil são dados de propriedade
 // do ERP, não da loja — a loja só lê essa base (nunca escreve aqui). Estoque
@@ -51,6 +51,17 @@ app.post("/erp/orders", async (req: Request, res: Response) => {
     return;
   }
 
+  // Corta a conexão de verdade (sem status HTTP nenhum) em vez de responder
+  // — diferente de "always-http-error" abaixo, que responde com um status de
+  // erro real. Isso é o que faz `this.erp.call()` rejeitar (fetch lança em
+  // vez de resolver), não apenas devolver um "success: false" — exercita o
+  // try/catch de CheckoutService.settleWithErp, não o `if (!res.ok)`.
+  if (mode === "always-reset") {
+    await sleep(delayHeader ? Number(delayHeader) : 100);
+    req.socket.destroy();
+    return;
+  }
+
   await sleep(delayHeader ? Number(delayHeader) : randomBetween(500, 4000));
 
   if (mode === "always-success") {
@@ -59,6 +70,10 @@ app.post("/erp/orders", async (req: Request, res: Response) => {
   }
   if (mode === "always-fail") {
     res.json({ success: false });
+    return;
+  }
+  if (mode === "always-http-error") {
+    res.status(503).json({ success: false, error: "erp_unavailable" });
     return;
   }
   res.json({ success: Math.random() < 0.8 });

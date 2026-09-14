@@ -1,11 +1,14 @@
 import { ErpService } from "./erp.service";
 
-// Único ponto do código que fala HTTP com o erp-mock de verdade — os testes
-// e2e só exercitam o caminho feliz (erp-mock sempre está de pé e sempre
-// responde 200) e nunca o erp-mock respondendo com erro. Ambos os métodos
-// têm um comportamento documentado especificamente para essa situação
-// (falha o boot / trata como falha da tentativa) que hoje não tinha nenhuma
-// cobertura automatizada.
+// Único ponto do código que fala HTTP com o erp-mock de verdade. call()'s
+// caminho de erro (ERP_SIM_MODE=always-http-error/always-reset) já é
+// exercitado contra o erp-mock rodando de verdade em
+// backend/test/checkout.e2e-spec.ts — os testes abaixo continuam existindo
+// porque cobrem o mesmo comportamento de forma mais rápida e isolada, sem
+// depender de um processo HTTP real de pé. fetchCatalog() é diferente: só
+// falha uma vez, no boot do módulo, então não há um cenário e2e razoável
+// pra provocar isso contra o erp-mock real — aqui continua sendo a única
+// cobertura que existe para esse caminho.
 describe("ErpService", () => {
   const realFetch = global.fetch;
   let service: ErpService;
