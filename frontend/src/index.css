@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-paper: #f7f3ec;
+  --color-ink: #1f1b16;
+  --color-surface: #ffffff;
+  --color-line: #e6dfd1;
+
+  --color-accent: #3654ff;
+  --color-accent-dark: #2540db;
+
+  --color-sage: #2f6b4f;
+  --color-sage-dark: #1f5038;
+  --color-sage-tint: #e4efe7;
+
+  --color-clay: #b23a2e;
+  --color-clay-dark: #8c2c22;
+  --color-clay-tint: #f7e5e1;
+}
+
+@layer base {
+  body {
+    @apply bg-paper font-body text-ink;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in {
+    animation: none;
+  }
+}
