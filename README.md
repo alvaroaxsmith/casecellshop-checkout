@@ -180,11 +180,11 @@ Uma captura real desses logs, cobrindo o caminho feliz, os quatro tipos de erro 
 - **Testes de contrato formais (Pact) e testes de carga/performance** — próximo passo, não prioridade para esta entrega.
 - **Um layout de UI elaborado** — não é o foco desta entrega.
 
-## Próximos passos: branches planejadas com Redis e com Redis + fila
+## Próximos passos: uma branch com Redis já construída, e uma com Redis + fila planejada
 
-O em-memória deste mini-projeto é uma escolha deliberada de escopo, não desconhecimento do que uma versão de produção exige — as ADRs de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) já especificam essa evolução em fases, respondendo à Pergunta 1/2 de [`Parte 1.A — Perguntas Conceituais.md`](Parte%201.A%20—%20Perguntas%20Conceituais.md). O próximo passo é materializar essas duas fases como branches separadas do código real (não só como texto), para comparar as três versões lado a lado sob os mesmos testes de concorrência/idempotência:
+O em-memória deste mini-projeto é uma escolha deliberada de escopo, não desconhecimento do que uma versão de produção exige — as ADRs de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) já especificam essa evolução em fases, respondendo à Pergunta 1/2 de [`Parte 1.A — Perguntas Conceituais.md`](Parte%201.A%20—%20Perguntas%20Conceituais.md). A ideia é materializar essas duas fases como branches separadas do código real (não só como texto), para comparar as três versões lado a lado sob os mesmos testes de concorrência/idempotência: a branch [`redis`](https://github.com/alvaroaxsmith/casecellshop-checkout/tree/redis) (Fase 1) já existe e está validada com Redis de verdade; a Fase 2 (`redis-queue`) segue só planejada.
 
-| | **Este mini-projeto** (`main`) | **Branch planejada `redis`** (Fase 1) | **Branch planejada `redis-queue`** (Fase 2) |
+| | **Este mini-projeto** (`main`) | **Branch [`redis`](https://github.com/alvaroaxsmith/casecellshop-checkout/tree/redis)** (Fase 1, já construída) | **Branch planejada `redis-queue`** (Fase 2) |
 |---|---|---|---|
 | Reserva de estoque | `Map` em memória, checagem-e-reserva síncrona no processo | Script Lua no Redis, mesma garantia de operação atômica (ADR-002) | Igual à Fase 1 |
 | Idempotência | `Map` em memória, sem TTL (processo de vida curta) | Chave no Redis, TTL 24h (ADR-003) | Igual à Fase 1 |
