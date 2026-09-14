@@ -39,7 +39,7 @@ npm run dev
 
 Open `http://localhost:5173`. The frontend's Vite dev server proxies `/api/*` to `http://localhost:3001` (see `frontend/vite.config.ts`), so the browser never talks to the backend's port directly — only through that proxy.
 
-None of the three services need a `.env` file to run with defaults. `PORT` changes the port for `erp-mock`/`backend`; the backend also reads `ERP_MOCK_URL` (which `erp-mock` to call, default `http://localhost:4000`), and `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` (forwarded as headers to `erp-mock` to force a specific simulated ERP behavior — `always-success`/`always-fail`/`always-timeout`/`random` — instead of the default random behavior). These are how the e2e test suite points the backend at a dedicated test instance of `erp-mock` and drives each scenario deterministically; see `backend/test/global-setup.ts` and `backend/src/erp/infrastructure/http-erp.gateway.ts`.
+None of the three services need a `.env` file to run with defaults. `PORT` changes the port for `erp-mock`/`backend`; the backend also reads `ERP_MOCK_URL` (the URL of the `erp-mock` instance to call, default `http://localhost:4000`), and `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` (forwarded as headers to `erp-mock` to force a specific simulated ERP behavior — `always-success`/`always-fail`/`always-timeout`/`random` — instead of the default random behavior). These are how the e2e test suite points the backend at a dedicated test instance of `erp-mock` and drives each scenario deterministically; see `backend/test/global-setup.ts` and `backend/src/erp/infrastructure/http-erp.gateway.ts`.
 
 ## Running the tests
 
