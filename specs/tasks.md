@@ -39,30 +39,30 @@ Checklist derived from [`plan.md`](plan.md).
 
 ## Task 3: Checkout core — `POST /checkout` and `GET /orders/:id`
 
-- [ ] Write `backend/src/inventory/domain/errors/product-not-found.error.ts` and `backend/src/inventory/domain/errors/out-of-stock.error.ts`; confirm `PRODUCT_NOT_FOUND`/`OUT_OF_STOCK`/`ORDER_NOT_FOUND` are in the filter's `DOMAIN_ERROR_STATUS`
-- [ ] Write `backend/src/orders/domain/order.entity.ts`, `order.repository.ts`, and `backend/src/orders/domain/errors/order-not-found.error.ts`
-- [ ] Write `backend/src/orders/infrastructure/in-memory-order.repository.ts`, `orders.controller.ts`, `orders.module.ts`
-- [ ] Write `backend/src/idempotency/idempotency.service.ts` and `idempotency.module.ts`
-- [ ] Write `backend/src/erp/domain/erp-gateway.ts`, `backend/src/erp/infrastructure/http-erp.gateway.ts` (calls `erp-mock` over HTTP via `fetch`, forwarding `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` as headers), and `erp.module.ts`
-- [ ] Write `backend/test/global-setup.ts` and `backend/test/global-teardown.ts` (spawn/kill `erp-mock` for the e2e run, polling `/health`); modify `backend/test/jest-e2e.json` to reference them
-- [ ] Write the (failing) e2e test for the happy path
-- [ ] Run the test and confirm it fails
-- [ ] Write `backend/src/checkout/dto/checkout-request.dto.ts`
-- [ ] Write `backend/src/checkout/application/checkout.use-case.ts`
-- [ ] Write `backend/src/checkout/checkout.controller.ts` and `checkout.module.ts`; wire both into `app.module.ts`
-- [ ] Run the happy-path test and confirm it passes
-- [ ] Add and run the validation-error test
-- [ ] Add and run the missing-`idempotencyKey` test
-- [ ] Add and run the product-not-found test
-- [ ] Add and run the insufficient-stock + concurrency test
-- [ ] Add and run the idempotency test (via payload)
-- [ ] Add and run the idempotency-via-`Idempotency-Key`-header test
-- [ ] Add and run the ERP fast-failure test
-- [ ] Add and run the ERP timeout test
-- [ ] Write the required unit tests for `StockService` (`backend/src/inventory/domain/stock.service.spec.ts`, using hand-rolled fakes)
-- [ ] Write the required unit tests for `CheckoutUseCase` (`backend/src/checkout/application/checkout.use-case.spec.ts`, using `jest.Mocked<>`)
-- [ ] Run the full backend test suite (unit + e2e)
-- [ ] Commit
+- [x] Write `backend/src/inventory/domain/errors/product-not-found.error.ts` and `backend/src/inventory/domain/errors/out-of-stock.error.ts`; confirm `PRODUCT_NOT_FOUND`/`OUT_OF_STOCK`/`ORDER_NOT_FOUND` are in the filter's `DOMAIN_ERROR_STATUS`
+- [x] Write `backend/src/orders/domain/order.entity.ts`, `order.repository.ts`, and `backend/src/orders/domain/errors/order-not-found.error.ts`
+- [x] Write `backend/src/orders/infrastructure/in-memory-order.repository.ts`, `orders.controller.ts`, `orders.module.ts`
+- [x] Write `backend/src/idempotency/idempotency.service.ts` and `idempotency.module.ts`
+- [x] Write `backend/src/erp/domain/erp-gateway.ts`, `backend/src/erp/infrastructure/http-erp.gateway.ts` (calls `erp-mock` over HTTP via `fetch`, forwarding `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` as headers), and `erp.module.ts`
+- [x] Write `backend/test/global-setup.ts` and `backend/test/global-teardown.ts` (spawn/kill `erp-mock` for the e2e run, polling `/health`); modify `backend/test/jest-e2e.json` to reference them
+- [x] Write the (failing) e2e test for the happy path
+- [x] Run the test and confirm it fails
+- [x] Write `backend/src/checkout/dto/checkout-request.dto.ts`
+- [x] Write `backend/src/checkout/application/checkout.use-case.ts`
+- [x] Write `backend/src/checkout/checkout.controller.ts` and `checkout.module.ts`; wire both into `app.module.ts`
+- [x] Run the happy-path test and confirm it passes
+- [x] Add and run the validation-error test
+- [x] Add and run the missing-`idempotencyKey` test
+- [x] Add and run the product-not-found test
+- [x] Add and run the insufficient-stock + concurrency test
+- [x] Add and run the idempotency test (via payload)
+- [x] Add and run the idempotency-via-`Idempotency-Key`-header test
+- [x] Add and run the ERP fast-failure test
+- [x] Add and run the ERP timeout test
+- [x] Write the required unit tests for `StockService` (`backend/src/inventory/domain/stock.service.spec.ts`, using hand-rolled fakes)
+- [x] Write the required unit tests for `CheckoutUseCase` (`backend/src/checkout/application/checkout.use-case.spec.ts`, using `jest.Mocked<>`)
+- [x] Run the full backend test suite (unit + e2e)
+- [x] Commit
 
 ## Task 4: Frontend scaffold and product list
 
