@@ -95,10 +95,9 @@ Checklist derived from [`plan.md`](plan.md).
 
 ## Task 6: README and PROMPTS.md
 
-- [ ] Write `README.md` (install/run for all three packages — `erp-mock`, `backend`, `frontend` — plus test commands and design decisions)
-- [ ] Commit
-- [ ] Write `PROMPTS.md`
-
+- [x] Write `README.md` (install/run for all three packages — `erp-mock`, `backend`, `frontend` — plus test commands and design decisions)
+- [x] Commit
+- [x] Write `PROMPTS.md`
 
 ## Final review
 
