@@ -1,15 +1,15 @@
-import { Controller, Get, Inject, Param } from "@nestjs/common";
-import { ORDER_REPOSITORY, OrderRepository } from "./domain/order.repository";
-import { OrderNotFoundError } from "./domain/errors/order-not-found.error";
+import { Controller, Get, Param } from "@nestjs/common";
+import { OrdersService } from "./orders.service";
+import { OrderNotFoundException } from "../common/exceptions/app.exception";
 
 @Controller("orders")
 export class OrdersController {
-  constructor(@Inject(ORDER_REPOSITORY) private readonly orders: OrderRepository) {}
+  constructor(private readonly orders: OrdersService) {}
 
   @Get(":id")
   getStatus(@Param("id") id: string) {
-    const order = this.orders.findById(id);
-    if (!order) throw new OrderNotFoundError();
+    const order = this.orders.getOrder(id);
+    if (!order) throw new OrderNotFoundException();
 
     if (order.status === "failed") {
       return {

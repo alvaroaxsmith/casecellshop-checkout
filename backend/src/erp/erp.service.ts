@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { ErpGateway, ErpOutcome } from "../domain/erp-gateway";
+
+export interface ErpOutcome {
+  success: boolean;
+}
 
 @Injectable()
-export class HttpErpGateway implements ErpGateway {
+export class ErpService {
   async call(): Promise<ErpOutcome> {
     const baseUrl = process.env.ERP_MOCK_URL || "http://localhost:4000";
     const mode = process.env.ERP_SIM_MODE || "random";

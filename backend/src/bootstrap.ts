@@ -1,6 +1,6 @@
 import { INestApplication, ValidationError, ValidationPipe } from "@nestjs/common";
-import { InvalidInputError } from "./shared/domain/errors/invalid-input.error";
-import { HttpExceptionFilter } from "./shared/presentation/filters/http-exception.filter";
+import { ValidationFailedException } from "./common/exceptions/app.exception";
+import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 
 export function configureApp(app: INestApplication): void {
   app.useGlobalPipes(
@@ -8,8 +8,9 @@ export function configureApp(app: INestApplication): void {
       whitelist: true,
       exceptionFactory: (errors: ValidationError[]) => {
         const first = errors[0];
+        if (!first) return new ValidationFailedException("Dado inválido.", "unknown");
         const message = Object.values(first.constraints ?? {})[0] ?? "Dado inválido.";
-        return new InvalidInputError(message, first.property);
+        return new ValidationFailedException(message, first.property);
       },
     }),
   );

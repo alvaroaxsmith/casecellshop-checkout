@@ -1,9 +1,8 @@
 import { Module } from "@nestjs/common";
-import { ERP_GATEWAY } from "./domain/erp-gateway";
-import { HttpErpGateway } from "./infrastructure/http-erp.gateway";
+import { ErpService } from "./erp.service";
 
 @Module({
-  providers: [{ provide: ERP_GATEWAY, useClass: HttpErpGateway }],
-  exports: [ERP_GATEWAY],
+  providers: [ErpService],
+  exports: [ErpService],
 })
 export class ErpModule {}

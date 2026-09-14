@@ -1,14 +1,14 @@
 import { Body, Controller, Headers, HttpCode, Post } from "@nestjs/common";
-import { CheckoutUseCase } from "./application/checkout.use-case";
-import { CheckoutRequestDto } from "./dto/checkout-request.dto";
+import { CheckoutService } from "./checkout.service";
+import { CheckoutDto } from "./checkout.dto";
 
 @Controller("checkout")
 export class CheckoutController {
-  constructor(private readonly checkoutUseCase: CheckoutUseCase) {}
+  constructor(private readonly checkoutService: CheckoutService) {}
 
   @Post()
   @HttpCode(202)
-  checkout(@Body() dto: CheckoutRequestDto, @Headers("Idempotency-Key") headerKey?: string) {
-    return this.checkoutUseCase.execute(dto, headerKey);
+  checkout(@Body() dto: CheckoutDto, @Headers("Idempotency-Key") headerKey?: string) {
+    return this.checkoutService.checkout(dto, headerKey);
   }
 }

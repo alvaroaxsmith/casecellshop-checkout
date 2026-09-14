@@ -1,6 +1,6 @@
 import { IsInt, IsNotEmpty, IsOptional, IsPositive, IsString } from "class-validator";
 
-export class CheckoutRequestDto {
+export class CheckoutDto {
   @IsString({ message: "productId é obrigatório." })
   @IsNotEmpty({ message: "productId é obrigatório." })
   productId!: string;

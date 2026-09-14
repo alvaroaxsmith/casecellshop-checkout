@@ -8,4 +8,7 @@ async function bootstrap() {
   const port = process.env.PORT ? Number(process.env.PORT) : 3001;
   await app.listen(port);
 }
-bootstrap();
+bootstrap().catch((err: unknown) => {
+  console.error("Failed to start backend:", err);
+  process.exit(1);
+});
