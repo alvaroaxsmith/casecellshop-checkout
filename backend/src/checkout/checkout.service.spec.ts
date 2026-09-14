@@ -95,4 +95,32 @@ describe("CheckoutService", () => {
       jest.useRealTimers();
     }
   });
+
+  it("treats a rejected ERP call (network failure, not just an unsuccessful response) as a failed attempt", async () => {
+    jest.useFakeTimers();
+    try {
+      products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" });
+      const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
+      orders.createOrder.mockReturnValue(order);
+      orders.getOrder.mockReturnValue(order);
+      products.reserveStock.mockReturnValue(true);
+      erp.call.mockRejectedValue(new Error("fetch failed: ECONNREFUSED"));
+
+      await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
+
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(2000);
+      await jest.advanceTimersByTimeAsync(0);
+
+      // Same terminal outcome as an explicit { success: false } — a thrown/
+      // rejected erp.call() never becomes an unhandled rejection or crashes
+      // the retry loop.
+      expect(erp.call).toHaveBeenCalledTimes(3);
+      expect(products.releaseReservation).toHaveBeenCalledWith("ord_1");
+      expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "ERP_PROCESSING_FAILED", expect.any(String));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

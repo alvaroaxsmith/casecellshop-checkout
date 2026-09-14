@@ -231,7 +231,7 @@ Essas gravações não substituem a suíte automatizada — são uma amostra poi
 
 | Suíte | Statements | Testes |
 |---|---|---|
-| `backend` — unitários | 65.84% | 11 |
+| `backend` — unitários | 81.27% | 19 |
 | `backend` — e2e | 93.27% | 15 |
 | `erp-mock` | 96.15% | 7 |
 | `frontend` | 82.11% | 8 |

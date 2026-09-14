@@ -63,4 +63,22 @@ describe("ProductsService", () => {
 
     expect(service.reserveStock("ord_1", "produto-que-nao-existe", 1)).toBe(false);
   });
+
+  it("expires a reservation on its own once the TTL passes, freeing the stock back up", () => {
+    const service = new ProductsService(testCatalog());
+    const realNow = Date.now;
+    const start = realNow();
+
+    try {
+      service.reserveStock("ord_1", "capinha-preta", 1);
+      expect(service.availableStock("capinha-preta")).toBe(4);
+
+      // No confirmReservation/releaseReservation call — the TTL alone (2min,
+      // see RESERVATION_TTL_MS) has to be what frees the stock back up.
+      Date.now = () => start + 2 * 60 * 1000 + 1;
+      expect(service.availableStock("capinha-preta")).toBe(5);
+    } finally {
+      Date.now = realNow;
+    }
+  });
 });
