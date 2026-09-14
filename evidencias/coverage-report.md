@@ -1,52 +1,53 @@
-# Relatório de cobertura de testes
+# Relatório de cobertura de testes (branch `redis`)
 
-Números reais, gerados nesta sessão rodando `npm run test:coverage` (Jest `--coverage` no `backend`/`erp-mock`, Vitest `--coverage` no `frontend`) e `npm run test:e2e:coverage` no `backend` — nenhum número aqui foi estimado ou inventado. O texto bruto de cada ferramenta está reproduzido abaixo de cada tabela, sem edição.
+Números reais, gerados nesta sessão rodando `npm run test:coverage` (Jest `--coverage` no `backend`/`erp-mock`, Vitest `--coverage` no `frontend`) e `npm run test:e2e:coverage` no `backend`, contra Redis real — nenhum número aqui foi estimado ou inventado. O texto bruto de cada ferramenta está reproduzido abaixo de cada tabela, sem edição. Ver [`coverage-report.md` de `main`](https://github.com/alvaroaxsmith/casecellshop-checkout/blob/main/evidencias/coverage-report.md) para o mesmo relatório na versão em memória — os números de `erp-mock`/`frontend` são idênticos entre as branches, já que nenhum dos dois pacotes muda aqui.
 
 ## Resumo
 
 | Suíte | Statements | Branches | Functions | Lines | Testes |
 |---|---|---|---|---|---|
-| `backend` — unitários | 65.84% | 44.61% | 55.26% | 63.53% | 11 |
-| `backend` — e2e | 93.27% | 56.32% | 98.14% | 93.51% | 15 |
+| `backend` — unitários | 66.10% | 33.96% | 53.19% | 64.78% | 12 |
+| `backend` — e2e | 92.23% | 54.66% | 95.16% | 92.52% | 15 |
 | `erp-mock` | 96.15% | 77.77% | 83.33% | 96.00% | 7 |
 | `frontend` | 82.11% | 82.35% | 57.69% | 82.11% | 8 |
 
-O `backend` aparece duas vezes de propósito: os testes unitários cobrem só `ProductsService`/`CheckoutService` — os dois serviços que têm regra de negócio de verdade, conforme a decisão de teste registrada em [`specs/spec.md`](../specs/spec.md) ("Testing Decisions") — enquanto `OrdersService`/`IdempotencyService`/`ErpService`/controllers são exercitados de ponta a ponta pela suíte e2e via HTTP real. As duas rodadas juntas são a cobertura de verdade do backend; nenhuma das duas sozinha conta a história completa.
+Um teste unitário a mais que em `main` (12 vs. 11): `products.service.spec.ts` desta branch já tinha um teste de concorrência próprio (`lets only one of two concurrent reservations for the last unit succeed`, rodando contra Redis real) que não existe do lado em memória. `src/redis/redis.service.ts` aparece como um arquivo novo na cobertura (~83%) — não existe em `main`.
 
-## `backend` — testes unitários (`npm run test:coverage`)
+## `backend` — testes unitários (`REDIS_URL=redis://localhost:6379/1 npm run test:coverage`)
 
 ```
 -------------------------|---------|----------|---------|---------|-------------------
 File                     | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 -------------------------|---------|----------|---------|---------|-------------------
-All files                |   65.84 |    44.61 |   55.26 |   63.53 |
+All files                |    66.1 |    33.96 |   53.19 |   64.78 |
  checkout                |   88.73 |    63.15 |   88.88 |   89.06 |
   checkout.service.ts    |   88.73 |    63.15 |   88.88 |   89.06 | 72,91-94,97-100
  common/exceptions       |   88.88 |      100 |      75 |   88.88 |
   app.exception.ts       |   88.88 |      100 |      75 |   88.88 | 26
  erp                     |   14.28 |        0 |       0 |    7.69 |
   erp.service.ts         |   14.28 |        0 |       0 |    7.69 | 17,22-71
- idempotency             |   36.36 |        0 |       0 |   22.22 |
-  idempotency.service.ts |   36.36 |        0 |       0 |   22.22 | 11-23
- orders                  |   14.81 |        0 |       0 |       8 |
-  orders.service.ts      |   14.81 |        0 |       0 |       8 | 17-53
- products                |   89.28 |    77.27 |   76.92 |   91.66 |
-  products.service.ts    |   89.28 |    77.27 |   76.92 |   91.66 | 36-40,125-126
+ idempotency             |   46.15 |        0 |       0 |   36.36 |
+  idempotency.service.ts |   46.15 |        0 |       0 |   36.36 | 14-28
+ orders                  |   16.12 |        0 |       0 |   10.71 |
+  orders.service.ts      |   16.12 |        0 |       0 |   10.71 | 18-77
+ products                |    83.6 |    71.42 |   69.23 |   87.03 |
+  products.service.ts    |    83.6 |    71.42 |   69.23 |   87.03 | 35-40,114-118
+ redis                   |    82.6 |       50 |   71.42 |   80.95 |
 -------------------------|---------|----------|---------|---------|-------------------
 
 Test Suites: 2 passed, 2 total
-Tests:       11 passed, 11 total
+Tests:       12 passed, 12 total
 ```
 
-`erp`/`idempotency`/`orders` aparecem baixos aqui porque simplesmente não têm teste unitário próprio (por decisão de escopo, não por esquecimento) — são cobertos abaixo, pela suíte e2e.
+`erp`/`idempotency`/`orders` continuam sem teste unitário próprio, mesma decisão de escopo de `main` — cobertos pela suíte e2e abaixo. `redis.service.ts` fica em torno de 83% porque a conexão real com o Redis e o registro dos três scripts Lua (`defineCommand`) são exercitados pelos próprios testes de `ProductsService` que rodam contra Redis de verdade.
 
 ## `backend` — testes e2e (`npm run test:e2e:coverage`)
 
 ```
--------------------------------|---------|----------|---------|---------|----------------------------
+-------------------------------|---------|----------|---------|---------|-----------------------------------
 File                           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
--------------------------------|---------|----------|---------|---------|----------------------------
-All files                      |   93.27 |    56.32 |   98.14 |   93.51 |
+-------------------------------|---------|----------|---------|---------|-----------------------------------
+All files                      |   92.23 |    54.66 |   95.16 |   92.52 |
  src                           |   95.83 |       40 |     100 |     100 |
   app.module.ts                |     100 |      100 |     100 |     100 |
   bootstrap.ts                 |   93.33 |       40 |     100 |     100 | 12-13
@@ -69,17 +70,19 @@ All files                      |   93.27 |    56.32 |   98.14 |   93.51 |
  src/idempotency               |     100 |      100 |     100 |     100 |
   idempotency.module.ts        |     100 |      100 |     100 |     100 |
   idempotency.service.ts       |     100 |      100 |     100 |     100 |
- src/orders                    |   92.85 |       50 |     100 |   91.83 |
+ src/orders                    |   93.44 |    53.84 |     100 |   92.45 |
   order.dto.ts                 |     100 |      100 |     100 |     100 |
   orders.controller.ts         |     100 |      100 |     100 |     100 |
   orders.module.ts             |     100 |      100 |     100 |     100 |
-  orders.service.ts            |   85.18 |       40 |     100 |      84 | 37-38,47-48
- src/products                  |   89.77 |    54.54 |     100 |   89.33 |
+  orders.service.ts            |   87.09 |    45.45 |     100 |   85.71 | 45-48,57-60
+ src/products                  |   86.95 |    28.57 |     100 |   87.65 |
   product.dto.ts               |     100 |      100 |     100 |     100 |
   products.controller.ts       |     100 |      100 |     100 |     100 |
   products.module.ts           |     100 |      100 |     100 |     100 |
-  products.service.ts          |   83.92 |    54.54 |     100 |   83.33 | 54-55,81-84,99-102,125-126
--------------------------------|---------|----------|---------|---------|----------------------------
+  products.service.ts          |   80.32 |    28.57 |     100 |   81.48 | 65-68,86-89,97-98,107-108,117-118
+ src/redis                     |   85.71 |       50 |   71.42 |   83.33 |
+  redis.service.ts             |    82.6 |       50 |   71.42 |   80.95 | 44,52-55
+-------------------------------|---------|----------|---------|---------|-----------------------------------
 
 Test Suites: 3 passed, 3 total
 Tests:       15 passed, 15 total
@@ -136,10 +139,11 @@ Test Files  1 passed (1)
      Tests  8 passed (8)
 ```
 
-`*.service.ts` aparecem baixos porque `test/App.test.tsx` mocka `global.fetch` diretamente para controlar as respostas da API nos testes de componente — o código dos serviços em si (montagem de URL, parse de JSON) roda de verdade nessas chamadas, mas as ramificações de erro de rede dentro de cada `service.ts` individual não são exercitadas por um teste unitário dedicado a eles. `main.tsx` (bootstrap do React, `createRoot(...).render(...)`) é o equivalente do `main.ts`/`bootstrap.ts` do backend — não vale a pena cobrir com teste unitário.
+Idêntico a `main` — nenhum destes dois pacotes muda nesta branch.
 
 ## O que fica de fora de propósito, e por quê
 
-- **`main.ts`/`bootstrap.ts` (backend) e `main.tsx` (frontend)** — código de inicialização de processo (listen na porta, montagem do React no DOM). Testar isso exigiria subir um servidor/DOM real só para exercitar duas linhas de chamada de framework; a suíte `e2e/` (Playwright) já prova que o processo sobe e funciona de ponta a ponta.
-- **`erp.service.ts`/`orders.service.ts` nos unitários** — decisão de escopo já registrada em `specs/spec.md`: só `ProductsService` e `CheckoutService` têm lógica de negócio testável isoladamente; os demais são adaptadores finos, cobertos pela suíte e2e via HTTP real, não por unitários próprios.
-- **Ramos de erro de rede nos `*.service.ts` do frontend** — cobertos indiretamente por `App.test.tsx` (o teste "shows a connection error..." simula uma rejeição de `fetch`), mas o relatório de cobertura por arquivo não atribui isso à linha exata dentro do service porque o mock intercepta no nível do `fetch` global, não da chamada ao método do serviço.
+- **`main.ts`/`bootstrap.ts` (backend) e `main.tsx` (frontend)** — código de inicialização de processo. A suíte `e2e/` (Playwright) já prova que o processo sobe e funciona de ponta a ponta, Redis incluso.
+- **`erp.service.ts`/`orders.service.ts` nos unitários** — mesma decisão de escopo de `main`, registrada em `specs/spec.md`: só `ProductsService`/`CheckoutService` têm teste unitário dedicado; o resto é coberto via e2e.
+- **`redis.service.ts` não chega a 100%** — as linhas não cobertas são o tratamento do evento `error` da conexão (`this.client.on("error", ...)`) e o branch de falha do `ping()` — exigiriam simular uma queda real de conexão do Redis no meio do teste, o que nenhum dos cenários automatizados provoca de propósito (isso é coberto manualmente: ver o Troubleshooting do README para o que acontece quando o Redis está fora do ar).
+- **Ramos de erro de rede nos `*.service.ts` do frontend** — mesma explicação de `main`: cobertos indiretamente via mock de `fetch` global em `App.test.tsx`, não atribuídos à linha exata dentro do service pela ferramenta de cobertura.

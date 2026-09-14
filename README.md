@@ -273,8 +273,8 @@ Só desta branch: [`evidencias/logs-redis.md`](evidencias/logs-redis.md) valida 
 
 | Suíte | Statements | Testes |
 |---|---|---|
-| `backend` — unitários | REDIS_UNIT_STMTS | REDIS_UNIT_TESTS |
-| `backend` — e2e | REDIS_E2E_STMTS | REDIS_E2E_TESTS |
+| `backend` — unitários | 66.10% | 12 |
+| `backend` — e2e | 92.23% | 15 |
 | `erp-mock` | 96.15% | 7 |
 | `frontend` | 82.11% | 8 |
 
