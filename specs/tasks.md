@@ -4,7 +4,7 @@ Checklist derived from [`plan.md`](plan.md).
 
 **Task state legend** — update the marker as work happens, not only when a step is finished: `- [ ]` pending, `- [~]` in progress (started but not yet passing/committed), `- [x]` done (implemented, tests passing, committed). A step left at `[~]` across a session boundary tells whoever resumes exactly where things stand — never leave a step silently half-done with a stale `[ ]`.
 
-## Task 1: Backend scaffold (NestJS + DDD), Inventory domain, and `GET /products`
+## Task 1: Backend scaffold (NestJS), Products (catalog + stock), and `GET /products`
 
 - [x] Scaffold the backend package (`npm init`, install NestJS + Jest dependencies)
 - [x] Write the scripts and Jest unit-test config in `backend/package.json`
@@ -12,15 +12,12 @@ Checklist derived from [`plan.md`](plan.md).
 - [x] Write `backend/tsconfig.build.json`
 - [x] Write `backend/nest-cli.json`
 - [x] Write `backend/test/jest-e2e.json`
-- [x] Write `backend/src/shared/domain/domain-error.ts` and `backend/src/shared/domain/errors/invalid-input.error.ts`
-- [x] Write `backend/src/shared/presentation/filters/http-exception.filter.ts`
+- [x] Write `backend/src/common/exceptions/app.exception.ts` (typed exceptions extending `HttpException` directly — `ValidationFailedException`, `ProductNotFoundException`, `OutOfStockException`, `OrderNotFoundException`)
+- [x] Write `backend/src/common/filters/http-exception.filter.ts`
 - [x] Write `backend/src/bootstrap.ts` (`configureApp`: global `ValidationPipe` + `HttpExceptionFilter`)
-- [x] Write `backend/src/inventory/domain/product.entity.ts` and `backend/src/inventory/domain/product.repository.ts`
-- [x] Write `backend/src/inventory/domain/stock-reservation.entity.ts` and `backend/src/inventory/domain/stock-reservation.repository.ts`
-- [x] Write `backend/src/inventory/domain/stock.service.ts`
-- [x] Write `backend/src/inventory/infrastructure/in-memory-product.repository.ts` and `backend/src/inventory/infrastructure/in-memory-stock-reservation.repository.ts`
-- [x] Write `backend/src/inventory/inventory.controller.ts`
-- [x] Write `backend/src/inventory/inventory.module.ts`, `backend/src/app.module.ts`, and `backend/src/main.ts`
+- [x] Write `backend/src/products/products.service.ts` (catalog + stock reservation together, in-memory `Map`s — check-and-reserve as one synchronous operation)
+- [x] Write `backend/src/products/products.controller.ts`
+- [x] Write `backend/src/products/products.module.ts`, `backend/src/app.module.ts`, and `backend/src/main.ts`
 - [x] Write `backend/test/utils/create-test-app.ts` and the (failing) e2e test for `GET /products`
 - [x] Run the test and confirm it fails, then re-run until it passes
 - [x] Commit
@@ -39,16 +36,15 @@ Checklist derived from [`plan.md`](plan.md).
 
 ## Task 3: Checkout core — `POST /checkout` and `GET /orders/:id`
 
-- [x] Write `backend/src/inventory/domain/errors/product-not-found.error.ts` and `backend/src/inventory/domain/errors/out-of-stock.error.ts`; confirm `PRODUCT_NOT_FOUND`/`OUT_OF_STOCK`/`ORDER_NOT_FOUND` are in the filter's `DOMAIN_ERROR_STATUS`
-- [x] Write `backend/src/orders/domain/order.entity.ts`, `order.repository.ts`, and `backend/src/orders/domain/errors/order-not-found.error.ts`
-- [x] Write `backend/src/orders/infrastructure/in-memory-order.repository.ts`, `orders.controller.ts`, `orders.module.ts`
+- [x] Confirm `PRODUCT_NOT_FOUND`/`OUT_OF_STOCK`/`ORDER_NOT_FOUND` all extend `HttpException` with the right status in `backend/src/common/exceptions/app.exception.ts`
+- [x] Write `backend/src/orders/orders.service.ts`, `orders.controller.ts`, `orders.module.ts`
 - [x] Write `backend/src/idempotency/idempotency.service.ts` and `idempotency.module.ts`
-- [x] Write `backend/src/erp/domain/erp-gateway.ts`, `backend/src/erp/infrastructure/http-erp.gateway.ts` (calls `erp-mock` over HTTP via `fetch`, forwarding `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` as headers), and `erp.module.ts`
+- [x] Write `backend/src/erp/erp.service.ts` (calls `erp-mock` over HTTP via `fetch`, forwarding `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` as headers) and `erp.module.ts`
 - [x] Write `backend/test/global-setup.ts` and `backend/test/global-teardown.ts` (spawn/kill `erp-mock` for the e2e run, polling `/health`); modify `backend/test/jest-e2e.json` to reference them
 - [x] Write the (failing) e2e test for the happy path
 - [x] Run the test and confirm it fails
-- [x] Write `backend/src/checkout/dto/checkout-request.dto.ts`
-- [x] Write `backend/src/checkout/application/checkout.use-case.ts`
+- [x] Write `backend/src/checkout/checkout.dto.ts`
+- [x] Write `backend/src/checkout/checkout.service.ts`
 - [x] Write `backend/src/checkout/checkout.controller.ts` and `checkout.module.ts`; wire both into `app.module.ts`
 - [x] Run the happy-path test and confirm it passes
 - [x] Add and run the validation-error test
@@ -59,8 +55,8 @@ Checklist derived from [`plan.md`](plan.md).
 - [x] Add and run the idempotency-via-`Idempotency-Key`-header test
 - [x] Add and run the ERP fast-failure test
 - [x] Add and run the ERP timeout test
-- [x] Write the required unit tests for `StockService` (`backend/src/inventory/domain/stock.service.spec.ts`, using hand-rolled fakes)
-- [x] Write the required unit tests for `CheckoutUseCase` (`backend/src/checkout/application/checkout.use-case.spec.ts`, using `jest.Mocked<>`)
+- [x] Write the required unit tests for `ProductsService` (`backend/src/products/products.service.spec.ts`, using hand-rolled fakes)
+- [x] Write the required unit tests for `CheckoutService` (`backend/src/checkout/checkout.service.spec.ts`, using `jest.Mocked<>`)
 - [x] Run the full backend test suite (unit + e2e)
 - [x] Commit
 
