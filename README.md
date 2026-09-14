@@ -127,7 +127,7 @@ O backend segue uma estrutura NestJS direta — um `Controller`, um `Service`, u
 
 `ProductsService` combina o catálogo de produtos e a reserva de estoque no mesmo serviço porque `GET /products` precisa dos dois, e separá-los em dois serviços que dependem um do outro criaria uma dependência circular sem benefício nesta escala.
 
-### Armazenamento: Redis
+### Armazenamento: Redis, não mais em memória
 
 Estoque, pedidos e chaves de idempotência vivem no Redis (`docker-compose.yml`, persistência AOF habilitada) em vez de `Map`s no processo do backend — a diferença central desta branch em relação a `main`, e o motivo dela existir. A mesma garantia de correção (nunca vender além do estoque) continua vindo de uma operação indivisível, só que sustentada por um mecanismo diferente: em `main`, o event loop síncrono do Node garante que duas chamadas à mesma função nunca se intercalam; aqui, é o Redis que garante que um script Lua roda do início ao fim sem interrupção de outro comando — a mesma classe de garantia (atomicidade), infraestrutura diferente por baixo.
 
@@ -144,7 +144,7 @@ Estoque, pedidos e chaves de idempotência vivem no Redis (`docker-compose.yml`,
 
 **Três scripts Lua** (`backend/src/redis/lua/*.lua`, registrados via `ioredis`'s `defineCommand`) cobrem as três operações que precisam ser atômicas: `reserveStock` (poda reservas expiradas, soma as ativas, compara com o estoque base, grava se couber), `confirmReservation` (debita o estoque base permanentemente e remove a reserva — no-op se ela já não existir, o que evita debitar duas vezes) e `releaseReservation` (remove a reserva sem debitar). Os três são revisáveis linha a linha nesses arquivos — é exatamente o que a ADR-002 pede como compliance ("revisão manual do script Lua no code review").
 
-O teste e2e de concorrência (`backend/test/checkout.e2e-spec.ts`, mesmo texto de `main`) e um teste unitário adicional só desta branch (`products.service.spec.ts`, "lets only one of two concurrent reservations for the last unit succeed", rodando contra Redis real) são a garantia de regressão. Verificado manualmente também: matar o processo do backend no meio de uma sessão e religá-lo mantém pedidos e estoque exatamente como estavam — o que não seria verdade em `main`.
+O teste e2e de concorrência (`backend/test/checkout.e2e-spec.ts`, mesmo texto de `main`) e um teste unitário adicional só desta branch (`products.service.spec.ts`, "lets only one of two concurrent reservations for the last unit succeed", rodando contra Redis real) são a garantia de regressão automatizada. Validado manualmente também, com captura de terminal real — matar o processo do backend (`kill -9`) e religá-lo mantém pedido e estoque exatamente como estavam, e uma reserva expira sozinha por TTL nativo do Redis sem nenhum código da aplicação envolvido — ver [`evidencias/logs-redis.md`](evidencias/logs-redis.md) para os oito cenários comentados (log bruto sem edição em [`evidencias/logs-redis.txt`](evidencias/logs-redis.txt)).
 
 ### Frontend: Tailwind e fotos reais dos produtos
 
@@ -175,9 +175,9 @@ Uma captura real desses logs, cobrindo o caminho feliz, os quatro tipos de erro 
 
 ## Próximos passos: branches planejadas com Redis e com Redis + fila
 
-O em-memória deste mini-projeto é uma escolha deliberada de escopo, não desconhecimento do que uma versão de produção exige — as ADRs de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) já especificam essa evolução em fases, respondendo à Pergunta 1/2 de [`Parte 1.A — Perguntas Conceituais.md`](Parte%201.A%20—%20Perguntas%20Conceituais.md). O próximo passo é materializar essas duas fases como branches separadas do código real (não só como texto), para comparar as três versões lado a lado sob os mesmos testes de concorrência/idempotência:
+O em-memória do mini-projeto original (`main`) é uma escolha deliberada de escopo, não desconhecimento do que uma versão de produção exige — as ADRs de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) já especificam essa evolução em fases, respondendo à Pergunta 1/2 de [`Parte 1.A — Perguntas Conceituais.md`](Parte%201.A%20—%20Perguntas%20Conceituais.md). Esta branch (`redis`) já materializa a Fase 1 como código real, validado em [`evidencias/logs-redis.md`](evidencias/logs-redis.md); a Fase 2 (`redis-queue`) segue só planejada, não construída, para comparar as três versões lado a lado sob os mesmos testes de concorrência/idempotência:
 
-| | **Este mini-projeto** (`main`) | **Branch planejada `redis`** (Fase 1) | **Branch planejada `redis-queue`** (Fase 2) |
+| | **`main`** | **Esta branch (`redis`, Fase 1)** | **Branch planejada `redis-queue`** (Fase 2) |
 |---|---|---|---|
 | Reserva de estoque | `Map` em memória, checagem-e-reserva síncrona no processo | Script Lua no Redis, mesma garantia de operação atômica (ADR-002) | Igual à Fase 1 |
 | Idempotência | `Map` em memória, sem TTL (processo de vida curta) | Chave no Redis, TTL 24h (ADR-003) | Igual à Fase 1 |
@@ -217,6 +217,32 @@ Essas gravações não substituem a suíte automatizada — são uma amostra poi
 | Concorrência | Duas tentativas simultâneas pela última unidade — uma reserva, a outra recusada |
 | Idempotência | Mesma `Idempotency-Key` reenviada retorna o pedido original, sem duplicar reserva |
 | Falha do ERP | 3 tentativas esgotadas com backoff, pedido termina `failed` com `ERP_PROCESSING_FAILED` |
+
+Só desta branch: [`evidencias/logs-redis.md`](evidencias/logs-redis.md) valida especificamente o que mudou — reserva atômica via Lua sob concorrência, pedido e estoque sobrevivendo a um `kill -9` do processo, e uma reserva expirando sozinha por TTL nativo do Redis:
+
+| Cenário coberto (só nesta branch) | Resultado |
+|---|---|
+| Restart do processo (`kill -9` + religa) | Pedido e estoque idênticos a antes do restart — não seria verdade em `main` |
+| TTL nativo de uma reserva | Chave some sozinha do Redis, sem cron nem sweep da aplicação |
+| Inspeção direta das chaves (`redis-cli`) | Confirma que o esquema de chaves descrito acima é real, não só a API respondendo certo |
+
+## Troubleshooting
+
+**`Error: connect ECONNREFUSED 127.0.0.1:6379` ao rodar o backend ou os testes**
+
+O Redis não está de pé. Suba com `docker compose up -d redis` (requer Docker rodando) ou, sem Docker, um `redis-server` local escutando em `6379` (`brew install redis && redis-server --daemonize yes` no macOS). `backend/test/global-setup.ts` já falha rápido com essa mesma orientação se os testes e2e não conseguirem conectar.
+
+**`EADDRINUSE` ao reiniciar o backend manualmente**
+
+`nest start --watch` sobe um processo filho que sobrevive a matar só o processo `npm` — mata pela porta, não pelo PID: `lsof -ti:3001 | xargs kill -9`. É o mesmo cuidado que o script de captura de evidência (`evidencias/`) usa entre as duas execuções.
+
+**Testes unitários de `ProductsService` falhando com dados de uma execução anterior**
+
+Esses testes rodam contra Redis real, não fakes — se algo interromper a suíte no meio (`Ctrl+C`), o banco de teste (`redis://localhost:6379/1`, DB lógico separado do `0` usado por `start:dev`) pode ficar com chaves de uma reserva inacabada. `redis-cli -n 1 flushdb` limpa; rodar a suíte de novo também limpa sozinho (`beforeEach` já faz `flushdb`).
+
+**Estoque parece "errado" depois de várias execuções manuais seguidas**
+
+`product:stock:{productId}` é semeado só uma vez (`SET NX`) e só muda por venda confirmada — reiniciar o backend não reseta o catálogo para os valores originais do `erp-mock`, de propósito (ver ["Catálogo"](#catálogo-o-erp-é-o-dono-dos-dados-a-loja-só-lê) acima). Para voltar ao estado inicial (5/10/1), `redis-cli flushdb` antes de religar o backend.
 
 ## Leitura complementar
 
