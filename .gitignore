@@ -7,3 +7,9 @@ node_modules/
 dist/
 .env
 .env.local
+
+e2e/test-results/
+e2e/playwright-report/
+e2e/playwright/.cache/
+
+.DS_Store
