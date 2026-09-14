@@ -82,22 +82,23 @@ Checklist derived from [`plan.md`](plan.md).
 
 ## Task 5: Frontend checkout flow — button, loading, messages
 
-- [ ] Add `postCheckout` and `fetchOrderStatus` to `frontend/src/api.ts`
-- [ ] Write the (failing) test for the loading/disabled-button state
-- [ ] Run the test and confirm it fails
-- [ ] Rewrite `frontend/src/App.tsx` with the full checkout flow
-- [ ] Run the test and confirm it passes
-- [ ] Add and run the out-of-stock message test
-- [ ] Add and run the validation-error message test
-- [ ] Add and run the success and failure via-polling tests
-- [ ] Run the full frontend test suite
-- [ ] Commit
+- [x] Add `postCheckout` and `fetchOrderStatus` to `frontend/src/api.ts`
+- [x] Write the (failing) test for the loading/disabled-button state
+- [x] Run the test and confirm it fails
+- [x] Rewrite `frontend/src/App.tsx` with the full checkout flow
+- [x] Run the test and confirm it passes
+- [x] Add and run the out-of-stock message test
+- [x] Add and run the validation-error message test
+- [x] Add and run the success and failure via-polling tests
+- [x] Run the full frontend test suite
+- [x] Commit
 
 ## Task 6: README and PROMPTS.md
 
 - [ ] Write `README.md` (install/run for all three packages — `erp-mock`, `backend`, `frontend` — plus test commands and design decisions)
-- [ ] Write `PROMPTS.md`
 - [ ] Commit
+- [ ] Write `PROMPTS.md`
+
 
 ## Final review
 
