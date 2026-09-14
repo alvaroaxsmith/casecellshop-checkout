@@ -127,6 +127,14 @@ scripts/scenarios.sh all   # roda todos os cenários abaixo em sequência
 
 O cenário `erp-failure` só é determinístico se o backend tiver sido iniciado com `ERP_SIM_MODE=always-fail npm run dev` (ver "Instalação e execução" acima) — com o modo `random` padrão, o script avisa isso na tela e reporta o que aconteceu de verdade. O script não sobe nem derruba nenhum processo — só assume que `npm run dev` já está rodando em outra aba.
 
+Só nesta branch, mais três comandos que exercitam o que o Redis muda de verdade:
+
+| Comando | O que faz |
+|---|---|
+| `keys` | Inspeciona `order:*`, `product:stock:*`, `reservation:*` direto no `redis-cli`, sem passar pela API |
+| `restart before` / `restart after <orderId>` | `before` cria um pedido e pede pra você reiniciar o backend manualmente (Ctrl+C + `npm run dev` de novo); `after` confirma que o pedido e o estoque sobreviveram — de propósito não é automático, já que derrubar o processo que você está olhando rodar em outro terminal não é algo que este script deveria fazer sozinho |
+| `ttl` | Demo isolada do TTL nativo (`SET ... EX 3`) mostrando uma reserva sumir sozinha do Redis, sem nenhum código da aplicação envolvido |
+
 ## Arquitetura e principais decisões técnicas
 
 ```mermaid

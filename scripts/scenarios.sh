@@ -12,6 +12,11 @@
 #   erp-failure    roda um checkout e reporta o desfecho real do ERP
 #   status <id>    consulta um pedido específico
 #   all             roda os cenários acima em sequência
+#
+#   só nesta branch (redis):
+#   keys                 inspeciona as chaves no redis-cli
+#   restart before/after  confirma que pedido e estoque sobrevivem a um restart
+#   ttl                   demo isolada do TTL nativo de uma reserva
 
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -169,6 +174,77 @@ cmd_erp_failure() {
   warn "pedido ${order_id} ainda pending depois de 8s"
 }
 
+cmd_keys() {
+  header "Chaves no Redis (redis-cli, sem passar pela API)"
+  info "order:*"
+  redis-cli keys 'order:*'
+  info "product:stock:*"
+  for p in capinha-preta capinha-transparente capinha-listrada; do
+    echo "  product:stock:${p} = $(redis-cli get "product:stock:${p}")"
+  done
+  info "reservation:* (ativas agora — reservas confirmadas/liberadas não aparecem aqui)"
+  redis-cli keys 'reservation:*'
+}
+
+cmd_restart() {
+  local phase="${1:-}"
+  case "$phase" in
+    before)
+      header "Restart (antes) — cria um pedido pra comparar depois"
+      local key
+      key=$(unique_key)
+      do_curl POST /checkout '{"productId":"capinha-preta","quantity":1,"idempotencyKey":"'"$key"'"}'
+      local order_id
+      order_id=$(json_field "$RESP_BODY" "orderId")
+      print_response "$RESP_BODY" "$RESP_STATUS"
+      info "aguardando confirmar..."
+      sleep 3
+      do_curl GET "/orders/${order_id}"
+      print_response "$RESP_BODY" "$RESP_STATUS"
+      echo ""
+      warn "agora reinicie o backend manualmente (Ctrl+C no terminal do \"npm run dev\" e rode de novo), e então rode:"
+      echo "  scripts/scenarios.sh restart after ${order_id}"
+      ;;
+    after)
+      local order_id="${2:-}"
+      if [ -z "$order_id" ]; then
+        fail "uso: scripts/scenarios.sh restart after <orderId>"
+        return 1
+      fi
+      header "Restart (depois) — confirmando que o pedido sobreviveu"
+      do_curl GET "/orders/${order_id}"
+      print_response "$RESP_BODY" "$RESP_STATUS"
+      if [ "$(json_field "$RESP_BODY" "status")" = "confirmed" ]; then
+        ok "pedido ${order_id} continua confirmed depois do restart — não seria assim em main"
+      else
+        warn "status inesperado — confira manualmente"
+      fi
+      cmd_products
+      ;;
+    *)
+      fail "uso: scripts/scenarios.sh restart before   |   scripts/scenarios.sh restart after <orderId>"
+      return 1
+      ;;
+  esac
+}
+
+cmd_ttl() {
+  header "TTL nativo do Redis liberando uma reserva sozinho (demo isolada, 3s)"
+  info "a reserva real usa TTL de 120s (longo demais pra caber numa demo) — isso aqui só mostra o mecanismo"
+  redis-cli set reservation:demo-ttl "capinha-preta:1" EX 3 >/dev/null
+  echo "TTL logo após criar: $(redis-cli ttl reservation:demo-ttl)"
+  info "aguardando 4s..."
+  sleep 4
+  local exists
+  exists=$(redis-cli exists reservation:demo-ttl)
+  echo "EXISTS depois de 4s (TTL era 3s): ${exists}"
+  if [ "$exists" = "0" ]; then
+    ok "a chave sumiu sozinha — nenhum código da aplicação rodou entre as duas linhas acima"
+  else
+    fail "a chave ainda existe — algo não bateu"
+  fi
+}
+
 cmd_status() {
   local order_id="${1:-}"
   if [ -z "$order_id" ]; then
@@ -202,18 +278,27 @@ main() {
     idempotency) cmd_idempotency ;;
     erp-failure) cmd_erp_failure ;;
     status) cmd_status "${2:-}" ;;
+    keys) cmd_keys ;;
+    restart) cmd_restart "${2:-}" "${3:-}" ;;
+    ttl) cmd_ttl ;;
     all) cmd_all ;;
     *)
       echo "Uso: scripts/scenarios.sh <comando>"
       echo ""
-      echo "  products       lista o catálogo com o estoque disponível"
-      echo "  happy          checkout de 1 unidade, com polling até confirmed"
-      echo "  out-of-stock   pede mais unidades do que há em estoque"
-      echo "  concurrency    dispara N requisições concorrentes pela última unidade"
-      echo "  idempotency    reenvia a mesma Idempotency-Key duas vezes"
-      echo "  erp-failure    roda um checkout e reporta o desfecho real"
-      echo "  status <id>    consulta um pedido específico"
-      echo "  all            roda todos os cenários acima em sequência"
+      echo "  products             lista o catálogo com o estoque disponível"
+      echo "  happy                checkout de 1 unidade, com polling até confirmed"
+      echo "  out-of-stock         pede mais unidades do que há em estoque"
+      echo "  concurrency          dispara N requisições concorrentes pela última unidade"
+      echo "  idempotency          reenvia a mesma Idempotency-Key duas vezes"
+      echo "  erp-failure          roda um checkout e reporta o desfecho real"
+      echo "  status <id>          consulta um pedido específico"
+      echo "  all                  roda todos os cenários acima em sequência"
+      echo ""
+      echo "  só nesta branch (redis):"
+      echo "  keys                 inspeciona as chaves order:*/product:stock:*/reservation:* direto no redis-cli"
+      echo "  restart before       cria um pedido e pede pra você reiniciar o backend manualmente"
+      echo "  restart after <id>   confirma que o pedido sobreviveu ao restart"
+      echo "  ttl                  demo isolada do TTL nativo liberando uma reserva sozinho"
       exit 1
       ;;
   esac

@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "install:all": "npm install --prefix erp-mock && npm install --prefix backend && npm install --prefix frontend",
+    "predev": "docker compose up -d redis && bash scripts/wait-for-redis.sh",
     "dev": "concurrently -n erp-mock,backend,frontend -c blue,green,magenta \"npm --prefix erp-mock run dev\" \"npm --prefix backend run start:dev\" \"npm --prefix frontend run dev\""
   },
   "devDependencies": {
