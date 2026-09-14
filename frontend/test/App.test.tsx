@@ -1,10 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { App } from "../src/App";
 import * as api from "../src/api";
 
 vi.mock("../src/api");
+
+afterEach(cleanup);
 
 describe("App - product list", () => {
   beforeEach(() => {
@@ -34,11 +36,9 @@ describe("App - checkout flow", () => {
     await waitFor(() => expect(screen.getByLabelText("Produto")).toBeInTheDocument());
 
     const user = userEvent.setup();
-    const buttons = screen.getAllByRole("button", { name: /comprar/i });
-    await user.click(buttons[0]);
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
 
-    const processingButtons = screen.getAllByRole("button", { name: /processando/i });
-    expect(processingButtons[0]).toBeDisabled();
+    expect(screen.getByRole("button", { name: /processando/i })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent(/processando sua compra/i);
   });
 
@@ -51,8 +51,7 @@ describe("App - checkout flow", () => {
     await waitFor(() => expect(screen.getByLabelText("Produto")).toBeInTheDocument());
 
     const user = userEvent.setup();
-    const buttons = screen.getAllByRole("button", { name: /comprar/i });
-    await user.click(buttons[0]);
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/esgotado/i);
@@ -68,8 +67,7 @@ describe("App - checkout flow", () => {
     await waitFor(() => expect(screen.getByLabelText("Produto")).toBeInTheDocument());
 
     const user = userEvent.setup();
-    const buttons = screen.getAllByRole("button", { name: /comprar/i });
-    await user.click(buttons[0]);
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/quantidade deve ser maior que zero/i);
@@ -86,12 +84,10 @@ describe("App - checkout flow", () => {
     await waitFor(() => expect(screen.getByLabelText("Produto")).toBeInTheDocument());
 
     const user = userEvent.setup();
-    const buttons = screen.getAllByRole("button", { name: /comprar/i });
-    await user.click(buttons[0]);
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
 
     await waitFor(() => {
-      const statuses = screen.getAllByRole("status");
-      expect(statuses[statuses.length - 1]).toHaveTextContent(/compra confirmada/i);
+      expect(screen.getByRole("status")).toHaveTextContent(/compra confirmada/i);
     });
   });
 
@@ -109,12 +105,10 @@ describe("App - checkout flow", () => {
     await waitFor(() => expect(screen.getByLabelText("Produto")).toBeInTheDocument());
 
     const user = userEvent.setup();
-    const buttons = screen.getAllByRole("button", { name: /comprar/i });
-    await user.click(buttons[0]);
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
 
     await waitFor(() => {
-      const alerts = screen.getAllByRole("alert");
-      expect(alerts[alerts.length - 1]).toHaveTextContent(/não conseguimos concluir/i);
+      expect(screen.getByRole("alert")).toHaveTextContent(/não conseguimos concluir/i);
     });
   });
 });
