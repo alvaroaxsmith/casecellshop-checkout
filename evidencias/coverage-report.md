@@ -2,44 +2,62 @@
 
 Números reais, gerados nesta sessão rodando `npm run test:coverage` (Jest `--coverage` no `backend`/`erp-mock`, Vitest `--coverage` no `frontend`) e `npm run test:e2e:coverage` no `backend`, contra Redis real — nenhum número aqui foi estimado ou inventado. O texto bruto de cada ferramenta está reproduzido abaixo de cada tabela, sem edição. Ver [`coverage-report.md` de `main`](https://github.com/alvaroaxsmith/casecellshop-checkout/blob/main/evidencias/coverage-report.md) para o mesmo relatório na versão em memória — os números de `erp-mock`/`frontend` são idênticos entre as branches, já que nenhum dos dois pacotes muda aqui.
 
+## Pontas soltas encontradas e fechadas
+
+A primeira versão deste relatório tinha 66.10% de cobertura nos testes unitários do `backend` — baixo o bastante pra valer a pena ler linha por linha o que exatamente ficava de fora, em vez de só aceitar o número (mesmo exercício feito em `main`, ver o link acima). Cruzando as linhas não cobertas do relatório unitário **com** as do e2e (uma linha só é uma lacuna de verdade se nenhuma das duas suítes a alcança), quatro delas eram comportamento documentado e importante, não decisão de escopo:
+
+| Lacuna | Onde | Por que importava |
+|---|---|---|
+| Reserva expira sozinha por TTL nativo do Redis | `reserve-stock.lua` (via `ProductsService.reserveStock`) | É a garantia central desta branch — TTL nativo em vez de sweep da aplicação — e nenhum teste automatizado jamais deixava uma reserva expirar de verdade pra provar que o script Lua realmente a exclui da contagem na próxima leitura; só a demo manual de `evidencias/logs-redis.md` fazia isso. |
+| `erp.call()` **rejeitando** (falha de rede), não só respondendo `success: false` | `CheckoutService.settleWithErp` | O `try/catch` ao redor do `Promise.race` existe especificamente para esse caso — e nenhum teste nunca fez o mock do ERP rejeitar de verdade, só resolver com falha. |
+| Fallback de erro 500 para uma exceção não tratada | `HttpExceptionFilter` | É a rede de segurança de todo o app — o único filtro global de exceções — e não tinha nenhum teste, unitário ou e2e, garantindo que ele realmente devolve um 500 bem formado em vez de vazar stack trace ou derrubar o processo. |
+| Backend falha ao iniciar se o `erp-mock` responder com erro ao buscar o catálogo | `ErpService.fetchCatalog` | Comportamento citado no README como decisão deliberada ("falha ao iniciar em vez de subir com um catálogo vazio") — e nunca verificado por um teste, só por leitura do código. |
+
+A primeira lacuna é a única que não é um port direto de `main`: lá, a mesma garantia usa `Date.now()` mockado pra simular o tempo passando num `Map` em memória; aqui, o teste força o TTL da chave `reservation:<orderId>` pra ~1s direto no Redis (`redis.client.expire(...)`) e espera de verdade — é o TTL nativo de verdade expirando, não uma simulação. As outras três portaram sem alteração de comportamento, só adaptando os mocks para o estilo assíncrono desta branch: `checkout.service.spec.ts` ganhou o teste de `erp.call()` rejeitando; `http-exception.filter.spec.ts` e `erp.service.spec.ts` são arquivos novos, idênticos aos de `main` porque `HttpExceptionFilter` e `ErpService` não mudam nesta branch.
+
+Resultado: cobertura unitária do `backend` foi de 66.10% → **78.65%** statements (33.96% → **51.61%** branches), com 8 testes novos (12 → 20).
+
 ## Resumo
 
 | Suíte | Statements | Branches | Functions | Lines | Testes |
 |---|---|---|---|---|---|
-| `backend` — unitários | 66.10% | 33.96% | 53.19% | 64.78% | 12 |
+| `backend` — unitários | 78.65% | 51.61% | 63.26% | 78.50% | 20 |
 | `backend` — e2e | 92.23% | 54.66% | 95.16% | 92.52% | 15 |
 | `erp-mock` | 96.15% | 77.77% | 83.33% | 96.00% | 7 |
 | `frontend` | 82.11% | 82.35% | 57.69% | 82.11% | 8 |
 
-Um teste unitário a mais que em `main` (12 vs. 11): `products.service.spec.ts` desta branch já tinha um teste de concorrência próprio (`lets only one of two concurrent reservations for the last unit succeed`, rodando contra Redis real) que não existe do lado em memória. `src/redis/redis.service.ts` aparece como um arquivo novo na cobertura (~83%) — não existe em `main`.
+Um teste unitário a mais que em `main` (20 vs. 19): esta branch já tinha, desde antes, um teste de concorrência próprio em `products.service.spec.ts` (`lets only one of two concurrent reservations for the last unit succeed`, rodando contra Redis real) que não existe do lado em memória. `src/redis/redis.service.ts` aparece como um arquivo novo na cobertura (~83%) — não existe em `main`.
 
 ## `backend` — testes unitários (`REDIS_URL=redis://localhost:6379/1 npm run test:coverage`)
 
 ```
--------------------------|---------|----------|---------|---------|-------------------
-File                     | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
--------------------------|---------|----------|---------|---------|-------------------
-All files                |    66.1 |    33.96 |   53.19 |   64.78 |
- checkout                |   88.73 |    63.15 |   88.88 |   89.06 |
-  checkout.service.ts    |   88.73 |    63.15 |   88.88 |   89.06 | 72,91-94,97-100
- common/exceptions       |   88.88 |      100 |      75 |   88.88 |
-  app.exception.ts       |   88.88 |      100 |      75 |   88.88 | 26
- erp                     |   14.28 |        0 |       0 |    7.69 |
-  erp.service.ts         |   14.28 |        0 |       0 |    7.69 | 17,22-71
- idempotency             |   46.15 |        0 |       0 |   36.36 |
-  idempotency.service.ts |   46.15 |        0 |       0 |   36.36 | 14-28
- orders                  |   16.12 |        0 |       0 |   10.71 |
-  orders.service.ts      |   16.12 |        0 |       0 |   10.71 | 18-77
- products                |    83.6 |    71.42 |   69.23 |   87.03 |
-  products.service.ts    |    83.6 |    71.42 |   69.23 |   87.03 | 35-40,114-118
- redis                   |    82.6 |       50 |   71.42 |   80.95 |
--------------------------|---------|----------|---------|---------|-------------------
+---------------------------|---------|----------|---------|---------|-------------------
+File                       | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+---------------------------|---------|----------|---------|---------|-------------------
+All files                  |   78.65 |    51.61 |   63.26 |    78.5 |
+ checkout                  |   91.54 |    68.42 |   88.88 |   92.18 |
+  checkout.service.ts      |   91.54 |    68.42 |   88.88 |   92.18 | 72,97-100
+ common/exceptions         |   88.88 |      100 |      75 |   88.88 |
+  app.exception.ts         |   88.88 |      100 |      75 |   88.88 | 26
+ common/filters            |     100 |    55.55 |     100 |     100 |
+  http-exception.filter.ts |     100 |    55.55 |     100 |     100 | 12,18-26
+ erp                       |     100 |       80 |     100 |     100 |
+  erp.service.ts           |     100 |       80 |     100 |     100 | 51-58
+ idempotency               |   46.15 |        0 |       0 |   36.36 |
+  idempotency.service.ts   |   46.15 |        0 |       0 |   36.36 | 14-28
+ orders                    |   16.12 |        0 |       0 |   10.71 |
+  orders.service.ts        |   16.12 |        0 |       0 |   10.71 | 18-77
+ products                  |    83.6 |    71.42 |   69.23 |   87.03 |
+  products.service.ts      |    83.6 |    71.42 |   69.23 |   87.03 | 35-40,114-118
+ redis                     |    82.6 |       50 |   71.42 |   80.95 |
+  redis.service.ts         |    82.6 |       50 |   71.42 |   80.95 | 44,52-55
+---------------------------|---------|----------|---------|---------|-------------------
 
-Test Suites: 2 passed, 2 total
-Tests:       12 passed, 12 total
+Test Suites: 4 passed, 4 total
+Tests:       20 passed, 20 total
 ```
 
-`erp`/`idempotency`/`orders` continuam sem teste unitário próprio, mesma decisão de escopo de `main` — cobertos pela suíte e2e abaixo. `redis.service.ts` fica em torno de 83% porque a conexão real com o Redis e o registro dos três scripts Lua (`defineCommand`) são exercitados pelos próprios testes de `ProductsService` que rodam contra Redis de verdade.
+`idempotency`/`orders` continuam sem teste unitário próprio, mesma decisão de escopo de `main` — cobertos pela suíte e2e abaixo. `products.service.ts` 35-40 são `listProducts()`/`findProduct()` (getters triviais, mesma explicação de `main`); 114-118 é a leitura da hash de reservas dentro de `reservedFor()` num caminho específico que os unitários não montam (coberto pelo e2e). `redis.service.ts` fica em torno de 83% pelo mesmo motivo do relatório anterior: o tratamento do evento `error` da conexão e o branch de falha do `ping()` exigiriam simular uma queda real do Redis no meio do teste.
 
 ## `backend` — testes e2e (`npm run test:e2e:coverage`)
 
@@ -87,6 +105,8 @@ All files                      |   92.23 |    54.66 |   95.16 |   92.52 |
 Test Suites: 3 passed, 3 total
 Tests:       15 passed, 15 total
 ```
+
+`erp.service.ts` 36-37/65-66 e `http-exception.filter.ts` 24-28 ficam descobertos aqui pelo mesmo motivo de `main`: nenhum cenário e2e consegue fazer o `erp-mock` responder com um status de erro (ele sempre responde 200), então só os unitários alcançam essas linhas. `orders.service.ts` 45-48/57-60 (guard de "ignora se o pedido já não está mais pending") fica como lacuna pequena e de baixo risco, mesma decisão de `main`.
 
 ## `erp-mock` (`npm run test:coverage`)
 
@@ -144,6 +164,7 @@ Idêntico a `main` — nenhum destes dois pacotes muda nesta branch.
 ## O que fica de fora de propósito, e por quê
 
 - **`main.ts`/`bootstrap.ts` (backend) e `main.tsx` (frontend)** — código de inicialização de processo. A suíte `e2e/` (Playwright) já prova que o processo sobe e funciona de ponta a ponta, Redis incluso.
-- **`erp.service.ts`/`orders.service.ts` nos unitários** — mesma decisão de escopo de `main`, registrada em `specs/spec.md`: só `ProductsService`/`CheckoutService` têm teste unitário dedicado; o resto é coberto via e2e.
+- **`idempotency.service.ts`/`orders.service.ts` nos unitários** — mesma decisão de escopo de `main`: só serviços com lógica de negócio própria mais os dois pontos de infraestrutura transversal com modo de falha documentado (`ErpService`, `HttpExceptionFilter`) ganham unitário dedicado.
+- **`OrdersService.markConfirmed`/`markFailed` chamados num pedido que já não está mais pending** — mesma lacuna pequena e de baixo risco de `main`, não fechada nesta rodada.
 - **`redis.service.ts` não chega a 100%** — as linhas não cobertas são o tratamento do evento `error` da conexão (`this.client.on("error", ...)`) e o branch de falha do `ping()` — exigiriam simular uma queda real de conexão do Redis no meio do teste, o que nenhum dos cenários automatizados provoca de propósito (isso é coberto manualmente: ver o Troubleshooting do README para o que acontece quando o Redis está fora do ar).
 - **Ramos de erro de rede nos `*.service.ts` do frontend** — mesma explicação de `main`: cobertos indiretamente via mock de `fetch` global em `App.test.tsx`, não atribuídos à linha exata dentro do service pela ferramenta de cobertura.

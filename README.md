@@ -273,7 +273,7 @@ Só desta branch: [`evidencias/logs-redis.md`](evidencias/logs-redis.md) valida 
 
 | Suíte | Statements | Testes |
 |---|---|---|
-| `backend` — unitários | 66.10% | 12 |
+| `backend` — unitários | 78.65% | 20 |
 | `backend` — e2e | 92.23% | 15 |
 | `erp-mock` | 96.15% | 7 |
 | `frontend` | 82.11% | 8 |
@@ -295,16 +295,6 @@ Esses testes rodam contra Redis real, não fakes — se algo interromper a suít
 **Estoque parece "errado" depois de várias execuções manuais seguidas**
 
 `product:stock:{productId}` é semeado só uma vez (`SET NX`) e só muda por venda confirmada — reiniciar o backend não reseta o catálogo para os valores originais do `erp-mock`, de propósito (ver ["Catálogo"](#catálogo-o-erp-é-o-dono-dos-dados-a-loja-só-lê) acima). Para voltar ao estado inicial (5/10/1), `redis-cli flushdb` antes de religar o backend.
-=======
-[`evidencias/coverage-report.md`](evidencias/coverage-report.md) traz os números reais de cobertura (`--coverage` do Jest/Vitest, não estimados) de cada suíte, com o texto bruto de cada ferramenta:
-
-| Suíte | Statements | Testes |
-|---|---|---|
-| `backend` — unitários | 65.84% | 11 |
-| `backend` — e2e | 93.27% | 15 |
-| `erp-mock` | 96.15% | 7 |
-| `frontend` | 82.11% | 8 |
->>>>>>> 03b7af8 (test: stress more scenarios, add coverage tooling and evidencias/coverage-report.md)
 
 ## Leitura complementar
 

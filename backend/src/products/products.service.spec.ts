@@ -85,4 +85,20 @@ describe("ProductsService", () => {
   it("refuses to reserve stock for a product that does not exist", async () => {
     expect(await service.reserveStock("ord_1", "produto-que-nao-existe", 1)).toBe(false);
   });
+
+  it("prunes a reservation from the active count once its Redis TTL expires, freeing the stock back up", async () => {
+    await service.reserveStock("ord_1", "capinha-preta", 1);
+    expect(await service.availableStock("capinha-preta")).toBe(4);
+
+    // The real reservation TTL is 120s (RESERVATION_TTL_SECONDS) — too long
+    // to actually wait in a test. reserve-stock.lua only cares that the
+    // "reservation:<orderId>" key still EXISTS, not what its original TTL
+    // was, so forcing it down to ~1s here exercises the exact same native-
+    // TTL pruning path without any code change or mock, no
+    // confirmReservation/releaseReservation call involved.
+    await redis.client.expire("reservation:ord_1", 1);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    expect(await service.availableStock("capinha-preta")).toBe(5);
+  });
 });
