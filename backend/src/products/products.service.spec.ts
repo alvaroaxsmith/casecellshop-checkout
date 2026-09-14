@@ -47,4 +47,20 @@ describe("ProductsService", () => {
 
     expect(service.availableStock("capinha-preta")).toBe(4);
   });
+
+  it("does not double-release stock when releaseReservation is called twice for the same order", () => {
+    const service = new ProductsService(testCatalog());
+
+    service.reserveStock("ord_1", "capinha-preta", 1);
+    service.releaseReservation("ord_1");
+    service.releaseReservation("ord_1");
+
+    expect(service.availableStock("capinha-preta")).toBe(5);
+  });
+
+  it("refuses to reserve stock for a product that does not exist", () => {
+    const service = new ProductsService(testCatalog());
+
+    expect(service.reserveStock("ord_1", "produto-que-nao-existe", 1)).toBe(false);
+  });
 });
