@@ -33,7 +33,7 @@ describe("CheckoutUseCase", () => {
   });
 
   it("throws a validation error when no idempotency key is provided", async () => {
-    await expect(useCase.execute({ productId: "p1", quantity: 1 } as any, undefined)).rejects.toBeInstanceOf(
+    await expect(useCase.execute({ productId: "p1", quantity: 1 }, undefined)).rejects.toBeInstanceOf(
       InvalidInputError,
     );
   });
@@ -41,7 +41,7 @@ describe("CheckoutUseCase", () => {
   it("throws a not-found error when the product does not exist", async () => {
     products.findById.mockReturnValue(undefined);
 
-    await expect(useCase.execute({ productId: "does-not-exist", quantity: 1 } as any, "key-1")).rejects.toBeInstanceOf(
+    await expect(useCase.execute({ productId: "does-not-exist", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(
       ProductNotFoundError,
     );
   });
@@ -52,7 +52,7 @@ describe("CheckoutUseCase", () => {
     orders.create.mockReturnValue(order);
     stock.reserveStock.mockReturnValue(false);
 
-    await expect(useCase.execute({ productId: "p1", quantity: 1 } as any, "key-1")).rejects.toBeInstanceOf(OutOfStockError);
+    await expect(useCase.execute({ productId: "p1", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(OutOfStockError);
     expect(order.status).toBe("failed");
     expect(orders.save).toHaveBeenCalledWith(order);
   });
@@ -61,7 +61,7 @@ describe("CheckoutUseCase", () => {
     const cached = { orderId: "ord_1", status: "pending" as const, statusUrl: "/orders/ord_1" };
     idempotency.getStoredResponse.mockReturnValue(cached);
 
-    const result = await useCase.execute({ productId: "p1", quantity: 1 } as any, "key-1");
+    const result = await useCase.execute({ productId: "p1", quantity: 1 }, "key-1");
 
     expect(result).toBe(cached);
     expect(orders.create).not.toHaveBeenCalled();

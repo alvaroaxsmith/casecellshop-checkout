@@ -5,7 +5,7 @@ import { ProductNotFoundError } from "../../inventory/domain/errors/product-not-
 import { OutOfStockError } from "../../inventory/domain/errors/out-of-stock.error";
 import { ORDER_REPOSITORY, OrderRepository } from "../../orders/domain/order.repository";
 import { IdempotencyService, CheckoutSuccessBody } from "../../idempotency/idempotency.service";
-import { ERP_GATEWAY, ErpGateway } from "../../erp/domain/erp-gateway";
+import { ERP_GATEWAY, ErpGateway, ErpOutcome } from "../../erp/domain/erp-gateway";
 import { InvalidInputError } from "../../shared/domain/errors/invalid-input.error";
 import { CheckoutRequestDto } from "../dto/checkout-request.dto";
 
@@ -46,7 +46,12 @@ export class CheckoutUseCase {
     const body: CheckoutSuccessBody = { orderId: order.id, status: "pending", statusUrl: `/orders/${order.id}` };
     this.idempotency.storeResponse(idempotencyKey, body);
 
-    void this.settleWithErp(order.id);
+    void this.settleWithErp(order.id).catch(() => {
+      // settleWithErp already turns every failure mode (including a rejected
+      // this.erp.call()) into a terminal "failed" order — this .catch() only
+      // exists as a last-resort net so a bug there can never surface as an
+      // unhandled rejection and crash the process.
+    });
 
     return body;
   }
@@ -56,7 +61,12 @@ export class CheckoutUseCase {
     if (!order) return;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const outcome = await Promise.race([this.erp.call(), this.timeoutAfter(ERP_TIMEOUT_MS)]);
+      let outcome: ErpOutcome;
+      try {
+        outcome = await Promise.race([this.erp.call(), this.timeoutAfter(ERP_TIMEOUT_MS)]);
+      } catch {
+        outcome = { success: false };
+      }
       if (outcome.success) {
         this.stock.confirmReservation(orderId);
         order.confirm();

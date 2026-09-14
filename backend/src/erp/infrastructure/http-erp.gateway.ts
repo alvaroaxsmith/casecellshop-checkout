@@ -18,6 +18,8 @@ export class HttpErpGateway implements ErpGateway {
       body: JSON.stringify({}),
     });
 
+    if (!res.ok) return { success: false };
+
     const data = (await res.json()) as { success: boolean };
     return { success: data.success };
   }
