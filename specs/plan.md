@@ -1291,11 +1291,15 @@ export class HttpErpGateway implements ErpGateway {
       body: JSON.stringify({}),
     });
 
+    if (!res.ok) return { success: false };
+
     const data = (await res.json()) as { success: boolean };
     return { success: data.success };
   }
 }
 ```
+
+A non-2xx response is treated as a failed attempt rather than trusting the body to be parseable JSON — `res.json()` would itself throw on an error page or empty body, and an uncaught throw here is exactly the failure mode `CheckoutUseCase.settleWithErp` (Step 10) is written to survive.
 
 ```ts
 // backend/src/erp/erp.module.ts
@@ -1462,7 +1466,7 @@ import { ProductNotFoundError } from "../../inventory/domain/errors/product-not-
 import { OutOfStockError } from "../../inventory/domain/errors/out-of-stock.error";
 import { ORDER_REPOSITORY, OrderRepository } from "../../orders/domain/order.repository";
 import { IdempotencyService, CheckoutSuccessBody } from "../../idempotency/idempotency.service";
-import { ERP_GATEWAY, ErpGateway } from "../../erp/domain/erp-gateway";
+import { ERP_GATEWAY, ErpGateway, ErpOutcome } from "../../erp/domain/erp-gateway";
 import { InvalidInputError } from "../../shared/domain/errors/invalid-input.error";
 import { CheckoutRequestDto } from "../dto/checkout-request.dto";
 
@@ -1503,7 +1507,12 @@ export class CheckoutUseCase {
     const body: CheckoutSuccessBody = { orderId: order.id, status: "pending", statusUrl: `/orders/${order.id}` };
     this.idempotency.storeResponse(idempotencyKey, body);
 
-    void this.settleWithErp(order.id);
+    void this.settleWithErp(order.id).catch(() => {
+      // settleWithErp already turns every failure mode (including a rejected
+      // this.erp.call()) into a terminal "failed" order — this .catch() only
+      // exists as a last-resort net so a bug there can never surface as an
+      // unhandled rejection and crash the process.
+    });
 
     return body;
   }
@@ -1513,7 +1522,12 @@ export class CheckoutUseCase {
     if (!order) return;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const outcome = await Promise.race([this.erp.call(), this.timeoutAfter(ERP_TIMEOUT_MS)]);
+      let outcome: ErpOutcome;
+      try {
+        outcome = await Promise.race([this.erp.call(), this.timeoutAfter(ERP_TIMEOUT_MS)]);
+      } catch {
+        outcome = { success: false };
+      }
       if (outcome.success) {
         this.stock.confirmReservation(orderId);
         order.confirm();
@@ -1540,6 +1554,8 @@ export class CheckoutUseCase {
 ```
 
 `CheckoutUseCase` is the one Application Service in this project: it sequences calls to `StockService`, the two repositories, `IdempotencyService`, and `ErpGateway` — it holds no business rule of its own that isn't a plain sequencing decision (e.g. "check idempotency before touching inventory"), per the constitution's definition of the Application layer. Note everything from the top of `execute()` through `this.stock.reserveStock(...)` is synchronous — no `await` appears until *after* the reservation decision is already made and `void this.settleWithErp(order.id)` is fired off without being awaited. That's what preserves the concurrency guarantee from Task 1: two overlapping calls to `execute()` can't interleave their reservation logic, no matter how the ERP call at the end behaves.
+
+The `try`/`catch` around `Promise.race` inside `settleWithErp` is not optional decoration: `this.erp.call()` is a real network call and will *reject* — not just resolve `{success: false}` — whenever `erp-mock` is unreachable, restarting, or returns a malformed response. Without the `try`/`catch`, that rejection would propagate out of `settleWithErp`, and since it's invoked as `void this.settleWithErp(order.id)`, an unhandled rejection under Node 20's default (`--unhandled-rejections=throw`) crashes the whole process — turning "the ERP is briefly unreachable" into "the API is down," the opposite of the resilience this task exists to build. Treating a rejection as a failed attempt keeps the retry budget meaningful for the failure mode retries matter most for. The `.catch()` on the fire-and-forget call itself is a second, redundant safety net — `settleWithErp` should never reject given the `try`/`catch` inside it, but a fire-and-forget call with no handler at all is one refactor away from silently reintroducing this exact crash, so the outer net stays even though it should never fire.
 
 - [ ] **Step 11: Write `backend/src/checkout/checkout.controller.ts` and `checkout.module.ts`; modify `app.module.ts`**
 
@@ -1878,7 +1894,7 @@ describe("CheckoutUseCase", () => {
   });
 
   it("throws a validation error when no idempotency key is provided", async () => {
-    await expect(useCase.execute({ productId: "p1", quantity: 1 } as any, undefined)).rejects.toBeInstanceOf(
+    await expect(useCase.execute({ productId: "p1", quantity: 1 }, undefined)).rejects.toBeInstanceOf(
       InvalidInputError,
     );
   });
@@ -1886,7 +1902,7 @@ describe("CheckoutUseCase", () => {
   it("throws a not-found error when the product does not exist", async () => {
     products.findById.mockReturnValue(undefined);
 
-    await expect(useCase.execute({ productId: "does-not-exist", quantity: 1 } as any, "key-1")).rejects.toBeInstanceOf(
+    await expect(useCase.execute({ productId: "does-not-exist", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(
       ProductNotFoundError,
     );
   });
@@ -1897,7 +1913,7 @@ describe("CheckoutUseCase", () => {
     orders.create.mockReturnValue(order);
     stock.reserveStock.mockReturnValue(false);
 
-    await expect(useCase.execute({ productId: "p1", quantity: 1 } as any, "key-1")).rejects.toBeInstanceOf(OutOfStockError);
+    await expect(useCase.execute({ productId: "p1", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(OutOfStockError);
     expect(order.status).toBe("failed");
     expect(orders.save).toHaveBeenCalledWith(order);
   });
@@ -1906,7 +1922,7 @@ describe("CheckoutUseCase", () => {
     const cached = { orderId: "ord_1", status: "pending" as const, statusUrl: "/orders/ord_1" };
     idempotency.getStoredResponse.mockReturnValue(cached);
 
-    const result = await useCase.execute({ productId: "p1", quantity: 1 } as any, "key-1");
+    const result = await useCase.execute({ productId: "p1", quantity: 1 }, "key-1");
 
     expect(result).toBe(cached);
     expect(orders.create).not.toHaveBeenCalled();
