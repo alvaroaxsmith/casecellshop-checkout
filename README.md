@@ -1,24 +1,33 @@
-# CaseCellShop — Checkout
+# CaseCellShop — Checkout (branch `redis`)
+
+> **Esta branch demonstra a Fase 1 (Redis) da evolução descrita no README de `main`.** O checkout, o contrato HTTP e a UI são idênticos aos de `main` — a mesma suíte `e2e/` passa sem nenhuma alteração nela — só a infraestrutura por baixo mudou: reserva de estoque, idempotência e persistência de pedidos deixam de viver em `Map`s do processo Node e passam a viver no Redis (script Lua para atomicidade, TTL nativo para expiração de reserva). O objetivo é validar as ADR-001/002/003 de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) contra infraestrutura de verdade, não só como texto. O que mudou em relação a `main` está resumido em ["Armazenamento: Redis, não mais em memória"](#armazenamento-redis-não-mais-em-memória) mais abaixo; o resto deste README é herdado de `main` e continua valendo sem alteração.
 
 Uma fatia fullstack executável de uma jornada de checkout de e-commerce: o cliente escolhe um produto e uma quantidade, tenta comprar, e o sistema garante que nunca vende além do estoque disponível, nunca duplica um pedido em caso de retry ou duplo clique, e sempre responde rápido mesmo quando o sistema de ERP usado como backend de faturamento está lento ou instável.
 
-O repositório contém três processos Node.js independentes — `erp-mock/`, `backend/`, `frontend/` — sem necessidade de Docker ou ferramenta de orquestração. Um quarto pacote, `e2e/`, contém testes end-to-end (Playwright) que sobem os três juntos e dirigem um navegador real contra a aplicação.
+O repositório contém três processos Node.js independentes — `erp-mock/`, `backend/`, `frontend/` — mais um `docker-compose.yml` só com o Redis (nesta branch, o backend depende dele; `main` não precisa de Docker). Um quarto pacote, `e2e/`, contém testes end-to-end (Playwright) que sobem os três serviços juntos e dirigem um navegador real contra a aplicação.
 
 | Item bônus | Onde ver | Resultado |
 |---|---|---|
 | Diagrama de arquitetura | [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas) | Fluxo completo usuário → frontend → backend → `erp-mock`, com a fronteira em memória explícita |
 | Logs estruturados | [Rastreabilidade](#rastreabilidade-logs-estruturados-em-todo-o-fluxo) · [`evidencias/logs-backend.md`](evidencias/logs-backend.md) | Captura real cobrindo caminho feliz, os 4 tipos de erro, concorrência pela última unidade, idempotência e esgotamento de retry com o ERP |
 | Endpoint de status do pedido | `GET /orders/:id` | Retorna `pending` / `confirmed` / `failed` (com `error.code`/`error.message` quando falha) |
-| Teste de concorrência | [Armazenamento em memória](#armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo) | Várias requisições simultâneas pela última unidade de estoque — exatamente uma reserva passa, as demais recusadas com `409` |
+| Teste de concorrência | [Armazenamento: Redis](#armazenamento-redis-não-mais-em-memória) | Várias requisições simultâneas pela última unidade de estoque — exatamente uma reserva passa, as demais recusadas com `409` (agora garantido por um script Lua atômico, não pelo event loop do Node) |
 
 ## Pré-requisitos
 
 - Node.js 20 LTS
 - npm
+- Docker (só para o Redis local — `docker compose up -d redis`); sem Docker Desktop, um `redis-server` instalado localmente (ex. `brew install redis`) também serve, desde que esteja escutando em `redis://localhost:6379`
 
 ## Instalação e execução
 
-Cada pacote é instalado e iniciado de forma independente, em seu próprio terminal, **nesta ordem** — o backend busca o catálogo de produtos no `erp-mock` assim que sobe (e falha ao iniciar se não conseguir), então `erp-mock` precisa estar de pé primeiro; o frontend precisa do backend para qualquer dado real.
+Redis primeiro (é uma dependência de boot do backend — sem ele, o backend não sobe), depois cada pacote independente em seu próprio terminal, **nesta ordem** — o backend busca o catálogo de produtos no `erp-mock` assim que sobe (e falha ao iniciar se não conseguir), então `erp-mock` precisa estar de pé antes dele; o frontend precisa do backend para qualquer dado real.
+
+**0. Redis**
+
+```bash
+docker compose up -d redis
+```
 
 **1. ERP mock — porta 4000**
 
@@ -48,7 +57,7 @@ Abra `http://localhost:5173`. O servidor de desenvolvimento do Vite (frontend) f
 
 A API do backend tem documentação interativa (Swagger/OpenAPI) em `http://localhost:3001/docs` — schema completo (incluindo os corpos de erro de cada status) em `http://localhost:3001/docs-json`.
 
-Nenhum dos três serviços precisa de arquivo `.env` para rodar com os valores padrão. `PORT` muda a porta do `erp-mock`/`backend`; o backend também lê `ERP_MOCK_URL` (a URL da instância de `erp-mock` a ser chamada, padrão `http://localhost:4000`), e `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` (repassadas como headers para o `erp-mock` para forçar um comportamento simulado específico do ERP — `always-success`/`always-fail`/`always-timeout`/`random` — em vez do comportamento aleatório padrão). É assim que a suíte de testes e2e aponta o backend para uma instância de teste dedicada do `erp-mock` e conduz cada cenário de forma determinística; veja `backend/test/global-setup.ts` e `backend/src/erp/erp.service.ts`.
+Nenhum dos três serviços precisa de arquivo `.env` para rodar com os valores padrão. `PORT` muda a porta do `erp-mock`/`backend`; o backend também lê `REDIS_URL` (padrão `redis://localhost:6379`, o que o `docker-compose.yml` já expõe), `ERP_MOCK_URL` (a URL da instância de `erp-mock` a ser chamada, padrão `http://localhost:4000`), e `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` (repassadas como headers para o `erp-mock` para forçar um comportamento simulado específico do ERP — `always-success`/`always-fail`/`always-timeout`/`random` — em vez do comportamento aleatório padrão). É assim que a suíte de testes e2e aponta o backend para uma instância de teste dedicada do `erp-mock` e conduz cada cenário de forma determinística; veja `backend/test/global-setup.ts` e `backend/src/erp/erp.service.ts`.
 
 ## Rodando os testes
 
@@ -108,9 +117,9 @@ O `erp-mock` é um serviço Express simples, e não uma segunda aplicação Nest
 
 ### Catálogo: o ERP é o dono dos dados, a loja só lê
 
-Produto, preço, estoque contábil e a foto de cada capinha são dados que o `erp-mock` expõe em `GET /erp/products` — não um array chumbado dentro do backend. O `ProductsModule` busca esse catálogo **uma vez, na inicialização** (`ProductsService` é montado por um provider assíncrono que chama `ErpService.fetchCatalog()` antes do Nest terminar de subir o módulo — veja `backend/src/products/products.module.ts`); se o `erp-mock` não responder nesse momento, o backend falha ao iniciar em vez de subir com um catálogo vazio ou inventado.
+Produto, preço, estoque contábil e a foto de cada capinha são dados que o `erp-mock` expõe em `GET /erp/products` — não um array chumbado dentro do backend. Nesta branch, o `ProductsService` busca esse catálogo com **cache-aside no Redis** (`catalog:products`, TTL 30s — ADR-001 de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md)): a primeira leitura depois que o cache expira busca no `erp-mock` e regrava o cache; as leituras seguintes, dentro da janela de 30s, nem tocam o ERP. Um *warm-up* no boot (`ProductsService.onModuleInit`) preenche o cache antes do Nest aceitar requisições, preservando o mesmo comportamento de "falha ao iniciar se o `erp-mock` estiver fora do ar" que a versão em memória de `main` tem.
 
-Esse é o mesmo princípio do plano de arquitetura incremental documentado em [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md): o ERP é sempre o único *escritor* de catálogo/preço/estoque contábil, a loja é sempre *leitora* — nunca o contrário. A diferença é só o meio: lá a sincronização é um job periódico (pull a cada 1–5 min); aqui, simplificada para uma busca única no boot, porque não há como o catálogo mudar depois que o processo já está de pé. O que **não** muda com essa simplificação é a fronteira mais importante: depois que o catálogo é carregado, a reserva/decremento de estoque continua inteiramente local ao `ProductsService` (ver seção seguinte) — nenhuma chamada ao ERP acontece durante um checkout, só no boot.
+O ERP continua sendo o único *escritor* de catálogo/preço/estoque contábil, a loja sempre *leitora* — mas o estoque disponível para reserva (`product:stock:{productId}` no Redis) é semeado só na primeira vez que cada produto é visto (`SET ... NX`), nunca sobrescrito pelos refreshes seguintes do cache-aside: o `erp-mock` é estático e não sabe quando a loja confirma uma venda, então sobrescrever a cada refresh apagaria um débito de estoque já confirmado, reabrindo a porta para overselling — exatamente o problema que esta branch existe para fechar. É o mesmo comportamento que a versão em memória de `main` já tinha (buscar o catálogo uma vez, e daí em diante só a loja mexe no número), só que agora sobrevivendo a um restart. Depois que o estoque é semeado, a reserva/decremento continua inteiramente dentro do Redis (ver seção seguinte) — nenhuma chamada ao ERP acontece durante um checkout, só no boot e nos refreshes periódicos do catálogo.
 
 ### Arquitetura do backend: Controller, Service, Module
 
@@ -118,9 +127,24 @@ O backend segue uma estrutura NestJS direta — um `Controller`, um `Service`, u
 
 `ProductsService` combina o catálogo de produtos e a reserva de estoque no mesmo serviço porque `GET /products` precisa dos dois, e separá-los em dois serviços que dependem um do outro criaria uma dependência circular sem benefício nesta escala.
 
-### Armazenamento em memória, sem banco de dados ou cache externo
+### Armazenamento: Redis
 
-Estoque, pedidos e chaves de idempotência vivem em `Map`s em memória, dentro do próprio processo do backend — adequado para um serviço de demonstração de vida curta, processo único. A garantia de correção que realmente importa é preservada mesmo sem infraestrutura externa: a operação de verificar-e-decrementar estoque roda como um passo indivisível porque permanece totalmente síncrona (sem `await` entre checar disponibilidade e reservar) dentro de um serviço singleton — o event loop do JavaScript nunca intercala duas chamadas à mesma função síncrona, então duas requisições concorrentes para a última unidade nunca podem ambas "passar" na verificação. O teste e2e de concorrência do backend (disparando várias tentativas de checkout simultâneas contra um produto com 1 unidade em estoque) é a garantia de regressão para isso.
+Estoque, pedidos e chaves de idempotência vivem no Redis (`docker-compose.yml`, persistência AOF habilitada) em vez de `Map`s no processo do backend — a diferença central desta branch em relação a `main`, e o motivo dela existir. A mesma garantia de correção (nunca vender além do estoque) continua vindo de uma operação indivisível, só que sustentada por um mecanismo diferente: em `main`, o event loop síncrono do Node garante que duas chamadas à mesma função nunca se intercalam; aqui, é o Redis que garante que um script Lua roda do início ao fim sem interrupção de outro comando — a mesma classe de garantia (atomicidade), infraestrutura diferente por baixo.
+
+**Esquema de chaves:**
+
+| Chave | Tipo | Papel |
+|---|---|---|
+| `catalog:products` | String (JSON), TTL 30s | Cache-aside do catálogo (nome/preço/imagem) |
+| `product:stock:{productId}` | String (inteiro) | Estoque base — semeado uma vez (`SET NX`), só muda por confirmação de venda |
+| `product:reservations:{productId}` | Hash `orderId → quantity` | Reservas já vistas para o produto, podadas de forma preguiçosa |
+| `reservation:{orderId}` | String, TTL 120s | Fonte da verdade de "essa reserva ainda está ativa" — some sozinha quando o TTL expira |
+| `order:{orderId}` | Hash | Os campos do pedido — sem TTL, é o que sustenta sobreviver a um restart |
+| `order:seq` | Contador (`INCR`) | Gera `ord_NNNNNN` sem colisão entre restarts |
+
+**Três scripts Lua** (`backend/src/redis/lua/*.lua`, registrados via `ioredis`'s `defineCommand`) cobrem as três operações que precisam ser atômicas: `reserveStock` (poda reservas expiradas, soma as ativas, compara com o estoque base, grava se couber), `confirmReservation` (debita o estoque base permanentemente e remove a reserva — no-op se ela já não existir, o que evita debitar duas vezes) e `releaseReservation` (remove a reserva sem debitar). Os três são revisáveis linha a linha nesses arquivos — é exatamente o que a ADR-002 pede como compliance ("revisão manual do script Lua no code review").
+
+O teste e2e de concorrência (`backend/test/checkout.e2e-spec.ts`, mesmo texto de `main`) e um teste unitário adicional só desta branch (`products.service.spec.ts`, "lets only one of two concurrent reservations for the last unit succeed", rodando contra Redis real) são a garantia de regressão. Verificado manualmente também: matar o processo do backend no meio de uma sessão e religá-lo mantém pedidos e estoque exatamente como estavam — o que não seria verdade em `main`.
 
 ### Frontend: Tailwind e fotos reais dos produtos
 

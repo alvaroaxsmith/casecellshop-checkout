@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { RedisService } from "../redis/redis.service";
 
 export type OrderStatus = "pending" | "confirmed" | "failed";
 
@@ -16,40 +17,71 @@ export interface Order {
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
 
-  private readonly orders = new Map<string, Order>();
-  private nextOrderNumber = 1;
+  constructor(private readonly redis: RedisService) {}
 
-  createOrder(productId: string, quantity: number): Order {
-    const id = `ord_${String(this.nextOrderNumber++).padStart(6, "0")}`;
+  async createOrder(productId: string, quantity: number): Promise<Order> {
+    const seq = await this.redis.client.incr("order:seq");
+    const id = `ord_${String(seq).padStart(6, "0")}`;
     const order: Order = { id, productId, quantity, status: "pending", createdAt: Date.now() };
-    this.orders.set(id, order);
+
+    await this.redis.client.hset(`order:${id}`, this.serialize(order));
     this.logger.log(`Pedido criado — orderId=${id} productId=${productId} quantity=${quantity} status=pending`);
     return order;
   }
 
-  getOrder(id: string): Order | undefined {
-    return this.orders.get(id);
+  async getOrder(id: string): Promise<Order | undefined> {
+    const data = await this.redis.client.hgetall(`order:${id}`);
+    if (Object.keys(data).length === 0) return undefined;
+    return this.deserialize(data);
   }
 
-  markConfirmed(id: string): void {
-    const order = this.orders.get(id);
+  // markConfirmed/markFailed só são chamados de dentro do laço de retry de
+  // um único pedido, em CheckoutService.settleWithErp — nunca duas vezes em
+  // paralelo para o mesmo orderId — por isso o padrão ler-depois-escrever
+  // abaixo não precisa da mesma atomicidade via Lua que reserveStock exige.
+  async markConfirmed(id: string): Promise<void> {
+    const order = await this.getOrder(id);
     if (!order || order.status !== "pending") {
-      this.logger.debug(`markConfirmed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`);
+      this.logger.debug(
+        `markConfirmed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`,
+      );
       return;
     }
-    order.status = "confirmed";
+    await this.redis.client.hset(`order:${id}`, { status: "confirmed" });
     this.logger.log(`Pedido confirmado — orderId=${id} status=confirmed`);
   }
 
-  markFailed(id: string, errorCode: string, errorMessage: string): void {
-    const order = this.orders.get(id);
+  async markFailed(id: string, errorCode: string, errorMessage: string): Promise<void> {
+    const order = await this.getOrder(id);
     if (!order || order.status !== "pending") {
-      this.logger.debug(`markFailed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`);
+      this.logger.debug(
+        `markFailed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`,
+      );
       return;
     }
-    order.status = "failed";
-    order.errorCode = errorCode;
-    order.errorMessage = errorMessage;
+    await this.redis.client.hset(`order:${id}`, { status: "failed", errorCode, errorMessage });
     this.logger.warn(`Pedido marcado como failed — orderId=${id} status=failed errorCode=${errorCode} errorMessage="${errorMessage}"`);
+  }
+
+  private serialize(order: Order): Record<string, string> {
+    return {
+      id: order.id,
+      productId: order.productId,
+      quantity: String(order.quantity),
+      status: order.status,
+      createdAt: String(order.createdAt),
+    };
+  }
+
+  private deserialize(data: Record<string, string>): Order {
+    return {
+      id: data.id,
+      productId: data.productId,
+      quantity: Number(data.quantity),
+      status: data.status as OrderStatus,
+      createdAt: Number(data.createdAt),
+      errorCode: data.errorCode,
+      errorMessage: data.errorMessage,
+    };
   }
 }

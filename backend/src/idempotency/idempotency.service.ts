@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { RedisService } from "../redis/redis.service";
 
 export interface CheckoutSuccessBody {
   orderId: string;
@@ -6,20 +7,24 @@ export interface CheckoutSuccessBody {
   statusUrl: string;
 }
 
+const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
 @Injectable()
 export class IdempotencyService {
   private readonly logger = new Logger(IdempotencyService.name);
 
-  private readonly store = new Map<string, CheckoutSuccessBody>();
+  constructor(private readonly redis: RedisService) {}
 
-  getStoredResponse(key: string): CheckoutSuccessBody | undefined {
-    const hit = this.store.get(key);
-    this.logger.debug(`Consulta de idempotência — idempotencyKey=${key} result=${hit ? "hit" : "miss"}${hit ? ` orderId=${hit.orderId}` : ""}`);
-    return hit;
+  async getStoredResponse(key: string): Promise<CheckoutSuccessBody | undefined> {
+    const raw = await this.redis.client.get(`idempotency:${key}`);
+    this.logger.debug(
+      `Consulta de idempotência — idempotencyKey=${key} result=${raw ? "hit" : "miss"}`,
+    );
+    return raw ? (JSON.parse(raw) as CheckoutSuccessBody) : undefined;
   }
 
-  storeResponse(key: string, response: CheckoutSuccessBody): void {
-    this.store.set(key, response);
-    this.logger.debug(`Resposta de sucesso armazenada — idempotencyKey=${key} orderId=${response.orderId}`);
+  async storeResponse(key: string, response: CheckoutSuccessBody): Promise<void> {
+    await this.redis.client.set(`idempotency:${key}`, JSON.stringify(response), "EX", IDEMPOTENCY_TTL_SECONDS);
+    this.logger.debug(`Resposta de sucesso armazenada — idempotencyKey=${key} orderId=${response.orderId} ttlSeconds=${IDEMPOTENCY_TTL_SECONDS}`);
   }
 }

@@ -15,8 +15,8 @@ export class OrdersController {
   @ApiParam({ name: "id", example: "ord_000001" })
   @ApiOkResponse({ type: OrderStatusResponseDto })
   @ApiNotFoundResponse({ type: ErrorResponseDto, description: "Id de pedido desconhecido." })
-  getStatus(@Param("id") id: string): OrderStatusResponseDto {
-    const order = this.orders.getOrder(id);
+  async getStatus(@Param("id") id: string): Promise<OrderStatusResponseDto> {
+    const order = await this.orders.getOrder(id);
     if (!order) throw new OrderNotFoundException();
 
     if (order.status === "failed") {

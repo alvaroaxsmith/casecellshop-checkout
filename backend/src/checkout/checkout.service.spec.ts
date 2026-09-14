@@ -42,7 +42,7 @@ describe("CheckoutService", () => {
   });
 
   it("throws a not-found error when the product does not exist", async () => {
-    products.findProduct.mockReturnValue(undefined);
+    products.findProduct.mockResolvedValue(undefined);
 
     await expect(service.checkout({ productId: "does-not-exist", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(
       ProductNotFoundException,
@@ -50,10 +50,10 @@ describe("CheckoutService", () => {
   });
 
   it("throws an out-of-stock error and marks the order failed when the reservation fails", async () => {
-    products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 0, imageUrl: "", imageAlt: "" });
+    products.findProduct.mockResolvedValue({ id: "p1", name: "P", priceCents: 100, imageUrl: "", imageAlt: "" });
     const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
-    orders.createOrder.mockReturnValue(order);
-    products.reserveStock.mockReturnValue(false);
+    orders.createOrder.mockResolvedValue(order);
+    products.reserveStock.mockResolvedValue(false);
 
     await expect(service.checkout({ productId: "p1", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(OutOfStockException);
     expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "OUT_OF_STOCK", expect.any(String));
@@ -61,7 +61,7 @@ describe("CheckoutService", () => {
 
   it("returns the cached response instead of creating a second order for a repeated key", async () => {
     const cached = { orderId: "ord_1", status: "pending" as const, statusUrl: "/orders/ord_1" };
-    idempotency.getStoredResponse.mockReturnValue(cached);
+    idempotency.getStoredResponse.mockResolvedValue(cached);
 
     const result = await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
 

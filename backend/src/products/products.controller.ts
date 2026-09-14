@@ -15,15 +15,18 @@ export class ProductsController {
       "Catálogo carregado do ERP na inicialização do backend, com o estoque disponível para venda de cada produto (estoque base menos reservas ativas).",
   })
   @ApiOkResponse({ type: ProductListResponseDto })
-  list(): ProductListResponseDto {
-    const products = this.products.listProducts().map((p) => ({
-      id: p.id,
-      name: p.name,
-      priceCents: p.priceCents,
-      stock: this.products.availableStock(p.id),
-      imageUrl: p.imageUrl,
-      imageAlt: p.imageAlt,
-    }));
+  async list(): Promise<ProductListResponseDto> {
+    const catalog = await this.products.listProducts();
+    const products = await Promise.all(
+      catalog.map(async (p) => ({
+        id: p.id,
+        name: p.name,
+        priceCents: p.priceCents,
+        stock: await this.products.availableStock(p.id),
+        imageUrl: p.imageUrl,
+        imageAlt: p.imageAlt,
+      })),
+    );
     return { products };
   }
 }

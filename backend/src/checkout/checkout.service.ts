@@ -40,28 +40,28 @@ export class CheckoutService {
       throw new ValidationFailedException("idempotencyKey é obrigatório.", "idempotencyKey");
     }
 
-    const cached = this.idempotency.getStoredResponse(idempotencyKey);
+    const cached = await this.idempotency.getStoredResponse(idempotencyKey);
     if (cached) {
       this.logger.log(`Checkout idempotente: resposta anterior reaproveitada, nada foi reprocessado — orderId=${cached.orderId} ${ctx}`);
       return cached;
     }
 
-    const product = this.products.findProduct(dto.productId);
+    const product = await this.products.findProduct(dto.productId);
     if (!product) {
       this.logger.warn(`Checkout rejeitado: produto inexistente — ${ctx}`);
       throw new ProductNotFoundException();
     }
 
-    const order = this.orders.createOrder(dto.productId, dto.quantity);
-    const reserved = this.products.reserveStock(order.id, dto.productId, dto.quantity);
+    const order = await this.orders.createOrder(dto.productId, dto.quantity);
+    const reserved = await this.products.reserveStock(order.id, dto.productId, dto.quantity);
     if (!reserved) {
-      this.orders.markFailed(order.id, "OUT_OF_STOCK", "Este produto está esgotado no momento.");
+      await this.orders.markFailed(order.id, "OUT_OF_STOCK", "Este produto está esgotado no momento.");
       this.logger.warn(`Checkout rejeitado: sem estoque suficiente — orderId=${order.id} ${ctx}`);
       throw new OutOfStockException();
     }
 
     const body: CheckoutSuccessBody = { orderId: order.id, status: "pending", statusUrl: `/orders/${order.id}` };
-    this.idempotency.storeResponse(idempotencyKey, body);
+    await this.idempotency.storeResponse(idempotencyKey, body);
     this.logger.log(`Checkout aceito, status=pending; liquidação com o ERP inicia em segundo plano — orderId=${order.id} ${ctx}`);
 
     void this.settleWithErp(order.id).catch((err: unknown) => {
@@ -79,7 +79,7 @@ export class CheckoutService {
   }
 
   private async settleWithErp(orderId: string): Promise<void> {
-    const order = this.orders.getOrder(orderId);
+    const order = await this.orders.getOrder(orderId);
     if (!order) return;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -94,8 +94,8 @@ export class CheckoutService {
         outcome = { success: false };
       }
       if (outcome.success) {
-        this.products.confirmReservation(orderId);
-        this.orders.markConfirmed(orderId);
+        await this.products.confirmReservation(orderId);
+        await this.orders.markConfirmed(orderId);
         this.logger.log(`ERP confirmou o pedido — orderId=${orderId} attempt=${attempt}/${MAX_ATTEMPTS}`);
         return;
       }
@@ -108,8 +108,8 @@ export class CheckoutService {
         await this.sleep(backoff);
       }
     }
-    this.products.releaseReservation(orderId);
-    this.orders.markFailed(
+    await this.products.releaseReservation(orderId);
+    await this.orders.markFailed(
       orderId,
       "ERP_PROCESSING_FAILED",
       "Não conseguimos concluir seu pedido agora. Tente novamente em instantes.",

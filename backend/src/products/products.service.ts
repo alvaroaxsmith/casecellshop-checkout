@@ -1,61 +1,72 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { RedisService } from "../redis/redis.service";
+import { ErpService } from "../erp/erp.service";
 
 export interface Product {
   id: string;
   name: string;
   priceCents: number;
-  stock: number;
   imageUrl: string;
   imageAlt: string;
 }
 
-interface Reservation {
-  productId: string;
-  quantity: number;
-  status: "active" | "confirmed" | "released";
-  expiresAt: number;
-}
-
-const RESERVATION_TTL_MS = 2 * 60 * 1000;
+const CATALOG_CACHE_KEY = "catalog:products";
+const CATALOG_TTL_SECONDS = 30;
+const RESERVATION_TTL_SECONDS = 120;
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
   private readonly logger = new Logger(ProductsService.name);
 
-  private readonly reservations = new Map<string, Reservation>();
+  constructor(
+    private readonly redis: RedisService,
+    private readonly erp: ErpService,
+  ) {}
 
-  // O catálogo (produto, preço, estoque contábil, imagem) é carregado uma
-  // única vez do ERP na inicialização (ver ProductsModule) — o ERP é o dono
-  // desses dados, a loja só lê. A partir daqui, porém, a reserva e o débito
-  // de estoque são inteiramente locais a este processo: nenhum método deste
-  // serviço faz uma chamada de rede, o que é o que garante a operação
-  // indivisível de checar-e-reservar (ver reserveStock).
-  constructor(private readonly products: Product[]) {}
-
-  listProducts(): Product[] {
-    return this.products;
+  // Aquece o cache no boot para a primeira requisição não pagar o custo de
+  // um cache-miss, e para preservar o mesmo comportamento de "falha ao
+  // iniciar se o erp-mock estiver fora do ar" que a versão em memória tem —
+  // o Nest aguarda onModuleInit antes de começar a aceitar requisições.
+  async onModuleInit(): Promise<void> {
+    await this.refreshCatalog();
   }
 
-  findProduct(id: string): Product | undefined {
-    return this.products.find((p) => p.id === id);
+  async listProducts(): Promise<Product[]> {
+    return this.getCatalog();
   }
 
-  availableStock(productId: string): number {
-    this.sweepExpired();
-    const product = this.products.find((p) => p.id === productId);
-    if (!product) return 0;
-    return product.stock - this.reservedFor(productId);
+  async findProduct(id: string): Promise<Product | undefined> {
+    const catalog = await this.getCatalog();
+    return catalog.find((p) => p.id === id);
   }
 
-  reserveStock(orderId: string, productId: string, quantity: number): boolean {
-    this.sweepExpired();
-    const product = this.products.find((p) => p.id === productId);
-    if (!product) {
-      this.logger.warn(`Reserva recusada: produto inexistente — orderId=${orderId} productId=${productId}`);
+  async availableStock(productId: string): Promise<number> {
+    const base = await this.redis.client.get(`product:stock:${productId}`);
+    if (base === null) return 0;
+    const reserved = await this.reservedFor(productId);
+    return Number(base) - reserved;
+  }
+
+  // Indivisível porque o script Lua roda inteiro sem interrupção de outro
+  // comando no mesmo Redis (ADR-002) — a mesma garantia que a versão em
+  // memória tinha por rodar síncrona dentro do event loop do Node, agora
+  // sustentada pelo Redis em vez do processo único do backend.
+  async reserveStock(orderId: string, productId: string, quantity: number): Promise<boolean> {
+    const available = await this.redis.client.reserveStock(
+      `product:stock:${productId}`,
+      `product:reservations:${productId}`,
+      quantity,
+      RESERVATION_TTL_SECONDS,
+      orderId,
+      productId,
+    );
+
+    if (available === -1) {
+      this.logger.warn(
+        `Reserva recusada: estoque base ainda não semeado — orderId=${orderId} productId=${productId}`,
+      );
       return false;
     }
-
-    const available = product.stock - this.reservedFor(productId);
     if (available < quantity) {
       this.logger.warn(
         `Reserva recusada: estoque insuficiente — orderId=${orderId} productId=${productId} requested=${quantity} available=${available}`,
@@ -63,70 +74,74 @@ export class ProductsService {
       return false;
     }
 
-    this.reservations.set(orderId, {
-      productId,
-      quantity,
-      status: "active",
-      expiresAt: Date.now() + RESERVATION_TTL_MS,
-    });
     this.logger.log(
-      `Estoque reservado — orderId=${orderId} productId=${productId} quantity=${quantity} remainingAvailable=${available - quantity} ttlMs=${RESERVATION_TTL_MS}`,
+      `Estoque reservado — orderId=${orderId} productId=${productId} quantity=${quantity} remainingAvailable=${available - quantity} ttlSeconds=${RESERVATION_TTL_SECONDS}`,
     );
     return true;
   }
 
-  confirmReservation(orderId: string): void {
-    const reservation = this.reservations.get(orderId);
-    if (!reservation || reservation.status !== "active") {
+  async confirmReservation(orderId: string): Promise<void> {
+    const changed = await this.redis.client.confirmReservation(`reservation:${orderId}`, orderId);
+    if (changed === 0) {
       this.logger.debug(
-        `confirmReservation ignorado (reserva inexistente ou não ativa; evita debitar estoque duas vezes) — orderId=${orderId} reservationStatus=${reservation?.status ?? "none"}`,
+        `confirmReservation ignorado (reserva inexistente ou não ativa; evita debitar estoque duas vezes) — orderId=${orderId}`,
       );
       return;
     }
-
-    const product = this.products.find((p) => p.id === reservation.productId);
-    if (product) product.stock -= reservation.quantity;
-
-    reservation.status = "confirmed";
-    this.logger.log(
-      `Reserva confirmada, estoque debitado — orderId=${orderId} productId=${reservation.productId} quantity=${reservation.quantity} newBaseStock=${product?.stock ?? "?"}`,
-    );
+    this.logger.log(`Reserva confirmada, estoque debitado — orderId=${orderId}`);
   }
 
-  releaseReservation(orderId: string): void {
-    const reservation = this.reservations.get(orderId);
-    if (!reservation || reservation.status !== "active") {
-      this.logger.debug(
-        `releaseReservation ignorado (reserva inexistente ou não ativa) — orderId=${orderId} reservationStatus=${reservation?.status ?? "none"}`,
-      );
+  async releaseReservation(orderId: string): Promise<void> {
+    const changed = await this.redis.client.releaseReservation(`reservation:${orderId}`, orderId);
+    if (changed === 0) {
+      this.logger.debug(`releaseReservation ignorado (reserva inexistente ou não ativa) — orderId=${orderId}`);
       return;
     }
-
-    reservation.status = "released";
-    this.logger.log(
-      `Reserva liberada, estoque volta a ficar disponível — orderId=${orderId} productId=${reservation.productId} quantity=${reservation.quantity}`,
-    );
+    this.logger.log(`Reserva liberada, estoque volta a ficar disponível — orderId=${orderId}`);
   }
 
-  private reservedFor(productId: string): number {
+  private async reservedFor(productId: string): Promise<number> {
+    const hash = await this.redis.client.hgetall(`product:reservations:${productId}`);
     let total = 0;
-    for (const reservation of this.reservations.values()) {
-      if (reservation.status === "active" && reservation.productId === productId) {
-        total += reservation.quantity;
-      }
+    for (const [orderId, quantity] of Object.entries(hash)) {
+      const stillActive = await this.redis.client.exists(`reservation:${orderId}`);
+      if (stillActive) total += Number(quantity);
     }
     return total;
   }
 
-  private sweepExpired(): void {
-    const now = Date.now();
-    for (const [orderId, reservation] of this.reservations.entries()) {
-      if (reservation.status === "active" && reservation.expiresAt <= now) {
-        reservation.status = "released";
-        this.logger.warn(
-          `Reserva expirou por TTL antes de ser confirmada ou liberada explicitamente — orderId=${orderId} productId=${reservation.productId} quantity=${reservation.quantity}`,
-        );
-      }
+  private async getCatalog(): Promise<Product[]> {
+    const cached = await this.redis.client.get(CATALOG_CACHE_KEY);
+    if (cached) return JSON.parse(cached) as Product[];
+
+    this.logger.debug(`Cache de catálogo vazio ou expirado, buscando no erp-mock — key=${CATALOG_CACHE_KEY}`);
+    return this.refreshCatalog();
+  }
+
+  private async refreshCatalog(): Promise<Product[]> {
+    const erpProducts = await this.erp.fetchCatalog();
+    const catalog: Product[] = erpProducts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      priceCents: p.priceCents,
+      imageUrl: p.imageUrl,
+      imageAlt: p.imageAlt,
+    }));
+
+    await this.redis.client.set(CATALOG_CACHE_KEY, JSON.stringify(catalog), "EX", CATALOG_TTL_SECONDS);
+
+    // NX: só grava se a chave ainda não existir. O erp-mock é estático (não
+    // sabe de pedidos que a loja já confirmou), então sobrescrever a cada
+    // refresh apagaria um débito local de estoque com o valor "de fábrica"
+    // do ERP — ver ADR-009 em referencias/decisoes-tecnicas.md. Sem TTL:
+    // esse valor só muda por confirmReservation, nunca deve expirar sozinho.
+    for (const p of erpProducts) {
+      await this.redis.client.set(`product:stock:${p.id}`, String(p.stock), "NX");
     }
+
+    this.logger.log(
+      `Catálogo atualizado a partir do erp-mock — productCount=${catalog.length} ttlSeconds=${CATALOG_TTL_SECONDS}`,
+    );
+    return catalog;
   }
 }
