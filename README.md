@@ -76,15 +76,17 @@ Nenhum dos três serviços precisa de arquivo `.env` para rodar com os valores p
 
 ```bash
 cd erp-mock
-npm test
+npm test               # ou npm run test:coverage para o relatório de cobertura
 ```
 
 **`backend/`** (Jest):
 
 ```bash
 cd backend
-npm test          # testes unitários (*.spec.ts) — regras de negócio de ProductsService e CheckoutService
-npm run test:e2e  # testes end-to-end (*.e2e-spec.ts) — contrato HTTP completo, incl. concorrência e idempotência
+npm test                    # testes unitários (*.spec.ts) — regras de negócio de ProductsService e CheckoutService
+npm run test:e2e            # testes end-to-end (*.e2e-spec.ts) — contrato HTTP completo, incl. concorrência e idempotência
+npm run test:coverage       # cobertura dos unitários
+npm run test:e2e:coverage   # cobertura da suíte e2e
 ```
 
 `npm run test:e2e` sobe o `erp-mock` automaticamente como um processo filho antes da suíte rodar e o encerra depois (`test/global-setup.ts` / `test/global-teardown.ts`, que fazem polling em `GET /health` antes de liberar os testes) — você **não** precisa ter o `erp-mock` já rodando em outro terminal especificamente para esse comando. Ele ainda é necessário como processo separado para o `start:dev`/uso manual do próprio backend, e para o fluxo do frontend acima.
@@ -93,7 +95,7 @@ npm run test:e2e  # testes end-to-end (*.e2e-spec.ts) — contrato HTTP completo
 
 ```bash
 cd frontend
-npm test
+npm test               # ou npm run test:coverage para o relatório de cobertura
 ```
 
 **`e2e/`** (Playwright — sobe os três serviços de verdade e testa pelo navegador):
@@ -267,6 +269,15 @@ Só desta branch: [`evidencias/logs-redis.md`](evidencias/logs-redis.md) valida 
 | TTL nativo de uma reserva | Chave some sozinha do Redis, sem cron nem sweep da aplicação |
 | Inspeção direta das chaves (`redis-cli`) | Confirma que o esquema de chaves descrito acima é real, não só a API respondendo certo |
 
+[`evidencias/coverage-report.md`](evidencias/coverage-report.md) traz os números reais de cobertura (`--coverage` do Jest/Vitest, não estimados) de cada suíte, com o texto bruto de cada ferramenta:
+
+| Suíte | Statements | Testes |
+|---|---|---|
+| `backend` — unitários | REDIS_UNIT_STMTS | REDIS_UNIT_TESTS |
+| `backend` — e2e | REDIS_E2E_STMTS | REDIS_E2E_TESTS |
+| `erp-mock` | 96.15% | 7 |
+| `frontend` | 82.11% | 8 |
+
 ## Troubleshooting
 
 **`Error: connect ECONNREFUSED 127.0.0.1:6379` ao rodar o backend ou os testes**
@@ -284,6 +295,16 @@ Esses testes rodam contra Redis real, não fakes — se algo interromper a suít
 **Estoque parece "errado" depois de várias execuções manuais seguidas**
 
 `product:stock:{productId}` é semeado só uma vez (`SET NX`) e só muda por venda confirmada — reiniciar o backend não reseta o catálogo para os valores originais do `erp-mock`, de propósito (ver ["Catálogo"](#catálogo-o-erp-é-o-dono-dos-dados-a-loja-só-lê) acima). Para voltar ao estado inicial (5/10/1), `redis-cli flushdb` antes de religar o backend.
+=======
+[`evidencias/coverage-report.md`](evidencias/coverage-report.md) traz os números reais de cobertura (`--coverage` do Jest/Vitest, não estimados) de cada suíte, com o texto bruto de cada ferramenta:
+
+| Suíte | Statements | Testes |
+|---|---|---|
+| `backend` — unitários | 65.84% | 11 |
+| `backend` — e2e | 93.27% | 15 |
+| `erp-mock` | 96.15% | 7 |
+| `frontend` | 82.11% | 8 |
+>>>>>>> 03b7af8 (test: stress more scenarios, add coverage tooling and evidencias/coverage-report.md)
 
 ## Leitura complementar
 

@@ -73,4 +73,16 @@ describe("ProductsService", () => {
 
     expect([a, b].filter(Boolean)).toHaveLength(1);
   });
+
+  it("does not double-release stock when releaseReservation is called twice for the same order", async () => {
+    await service.reserveStock("ord_1", "capinha-preta", 1);
+    await service.releaseReservation("ord_1");
+    await service.releaseReservation("ord_1");
+
+    expect(await service.availableStock("capinha-preta")).toBe(5);
+  });
+
+  it("refuses to reserve stock for a product that does not exist", async () => {
+    expect(await service.reserveStock("ord_1", "produto-que-nao-existe", 1)).toBe(false);
+  });
 });

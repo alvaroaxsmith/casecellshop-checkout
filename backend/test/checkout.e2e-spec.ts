@@ -61,6 +61,26 @@ describe("POST /checkout (e2e)", () => {
     expect(res.body.error.field).toBe("idempotencyKey");
   });
 
+  it("rejects a request without a productId", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/checkout")
+      .send({ quantity: 1, idempotencyKey: uniqueKey() });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.body.error.field).toBe("productId");
+  });
+
+  it("rejects a non-integer quantity with a validation error", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/checkout")
+      .send({ productId: "capinha-transparente", quantity: 1.5, idempotencyKey: uniqueKey() });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(res.body.error.field).toBe("quantity");
+  });
+
   it("returns 404 for a product that does not exist", async () => {
     const res = await request(app.getHttpServer())
       .post("/checkout")
@@ -94,6 +114,23 @@ describe("POST /checkout (e2e)", () => {
 
     expect(second.body).toEqual(first.body);
     expect(second.status).toBe(first.status);
+  });
+
+  it("ignores a mismatched payload on a repeated idempotency key and returns the original order", async () => {
+    process.env.ERP_SIM_MODE = "always-success";
+    process.env.ERP_SIM_DELAY_MS = "10";
+    const key = uniqueKey();
+
+    const first = await request(app.getHttpServer())
+      .post("/checkout")
+      .send({ productId: "capinha-preta", quantity: 1, idempotencyKey: key });
+    // Same key, different product and quantity — the cached response for the
+    // key wins; no second order is created for capinha-listrada.
+    const second = await request(app.getHttpServer())
+      .post("/checkout")
+      .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: key });
+
+    expect(second.body).toEqual(first.body);
   });
 
   it("accepts the idempotency key via the Idempotency-Key header instead of the body", async () => {
@@ -147,4 +184,29 @@ describe("POST /checkout (e2e)", () => {
     expect(statusRes.body.status).toBe("failed");
     expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
   }, 15000);
+
+  // Last on purpose: buys out whatever stock capinha-transparente has left
+  // at this point in the file, so it can't starve any test that runs after it.
+  it("under N concurrent purchases, exactly as many succeed as there is available stock", async () => {
+    process.env.ERP_SIM_MODE = "always-success";
+    process.env.ERP_SIM_DELAY_MS = "10";
+
+    const productsRes = await request(app.getHttpServer()).get("/products");
+    const product = productsRes.body.products.find((p: { id: string }) => p.id === "capinha-transparente");
+    const available: number = product.stock;
+    const attempts = available + 2;
+
+    const responses = await Promise.all(
+      Array.from({ length: attempts }, () =>
+        request(app.getHttpServer())
+          .post("/checkout")
+          .send({ productId: "capinha-transparente", quantity: 1, idempotencyKey: uniqueKey() }),
+      ),
+    );
+
+    const accepted = responses.filter((r) => r.status === 202).length;
+    const rejected = responses.filter((r) => r.status === 409).length;
+    expect(accepted).toBe(available);
+    expect(rejected).toBe(attempts - available);
+  });
 });

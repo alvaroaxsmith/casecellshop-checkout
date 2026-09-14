@@ -68,4 +68,31 @@ describe("CheckoutService", () => {
     expect(result).toBe(cached);
     expect(orders.createOrder).not.toHaveBeenCalled();
   });
+
+  it("retries three times with the documented backoff before releasing stock and marking the order failed", async () => {
+    jest.useFakeTimers();
+    try {
+      products.findProduct.mockResolvedValue({ id: "p1", name: "P", priceCents: 100, imageUrl: "", imageAlt: "" });
+      const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
+      orders.createOrder.mockResolvedValue(order);
+      orders.getOrder.mockResolvedValue(order);
+      products.reserveStock.mockResolvedValue(true);
+      erp.call.mockResolvedValue({ success: false });
+
+      await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
+
+      // Attempt 1 resolves immediately (mocked), then the two documented
+      // backoffs (1s, 2s) have to elapse for attempts 2 and 3 to fire.
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(2000);
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(erp.call).toHaveBeenCalledTimes(3);
+      expect(products.releaseReservation).toHaveBeenCalledWith("ord_1");
+      expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "ERP_PROCESSING_FAILED", expect.any(String));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

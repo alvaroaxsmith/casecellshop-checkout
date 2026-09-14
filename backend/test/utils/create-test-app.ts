@@ -8,5 +8,9 @@ export async function createTestApp(): Promise<INestApplication> {
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();
+  // Binds a real port once instead of letting supertest open/close an
+  // ephemeral listener per request — needed for tests that fire more than a
+  // couple of truly concurrent requests against the same server.
+  await app.listen(0);
   return app;
 }
