@@ -214,7 +214,7 @@ Uma captura real desses logs, cobrindo o caminho feliz, os quatro tipos de erro 
 - **Testes de contrato formais (Pact) e testes de carga/performance** — próximo passo, não prioridade para esta entrega.
 - **Um layout de UI elaborado** — não é o foco desta entrega.
 
-## Próximos passos: branches planejadas com Redis e com Redis + fila
+## Próximos passos: uma branch com Redis já construída, e uma com Redis + fila planejada
 
 O em-memória do mini-projeto original (`main`) é uma escolha deliberada de escopo, não desconhecimento do que uma versão de produção exige — as ADRs de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) já especificam essa evolução em fases, respondendo à Pergunta 1/2 de [`Parte 1.A — Perguntas Conceituais.md`](Parte%201.A%20—%20Perguntas%20Conceituais.md). Esta branch (`redis`) já materializa a Fase 1 como código real, validado em [`evidencias/logs-redis.md`](evidencias/logs-redis.md); a Fase 2 (`redis-queue`) segue só planejada, não construída, para comparar as três versões lado a lado sob os mesmos testes de concorrência/idempotência:
 
