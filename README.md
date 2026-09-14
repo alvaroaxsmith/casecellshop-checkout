@@ -107,6 +107,8 @@ npm test
 
 Diferente das suítes acima, essa não testa uma unidade nem um contrato HTTP isolado — ela sobe `erp-mock`, `backend` e `frontend` como processos reais (via `webServer` do `playwright.config.ts`) e dirige um navegador Chromium contra a UI, cobrindo o caminho feliz, bloqueio por falta de estoque e uma falha simulada do ERP com recuperação. Por isso ela precisa que as portas 4000/3001/5173 estejam livres antes de rodar (encerre qualquer instância manual dos três serviços da seção "Instalação e execução"). Cada execução grava vídeo, screenshot e trace de cada teste em `e2e/test-results/` (git-ignorado); veja `evidencias/` na raiz do repositório para uma amostra já gravada.
 
+Nesta branch, o backend do `webServer` roda com `REDIS_URL` apontando para um DB lógico dedicado (`redis://localhost:6379/2`, separado do `0` usado por `npm run dev` e do `1` usado pelos testes e2e do `backend/`), limpo automaticamente por um `globalSetup` (`e2e/global-setup.ts`) antes de cada execução — sem isso, o teste que espera "10 em estoque" no início falharia depois da primeira vez que alguém rodasse a suíte, porque o Redis (ao contrário do `Map` em memória de `main`) lembra o estoque entre execuções.
+
 ## Cenários de teste manual
 
 Com os três serviços de pé (`npm run dev`, numa aba separada), `scripts/scenarios.sh` dispara cenários reais contra a API via `curl`, com saída legível — útil pra explorar o comportamento na mão sem escrever `curl` a cada vez:

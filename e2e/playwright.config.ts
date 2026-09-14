@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  globalSetup: "./global-setup.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 30_000,
@@ -28,7 +29,7 @@ export default defineConfig({
       port: 3001,
       reuseExistingServer: false,
       timeout: 60_000,
-      env: { ERP_SIM_MODE: "always-success" },
+      env: { ERP_SIM_MODE: "always-success", REDIS_URL: "redis://localhost:6379/2" },
     },
     {
       command: "npm run dev",
