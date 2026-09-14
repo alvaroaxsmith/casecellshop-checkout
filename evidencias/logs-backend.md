@@ -2,7 +2,7 @@
 
 Captura real de terminal, gerada rodando o backend de verdade (nada mockado no nível de log — são as mesmas classes e o mesmo `Logger` do NestJS usados em produção) contra o `erp-mock` de verdade, e disparando `curl` contra cada cenário abaixo. Ver a seção "Rastreabilidade" do [`README.md`](../README.md) para o desenho geral (níveis de log, formato `campo=valor`, `requestId` vs. `orderId` como chave de correlação).
 
-A captura tem duas partes: o **Bloco 1** sobe o backend com `ERP_SIM_MODE=always-success` e cobre o caminho feliz e os erros que não dependem do ERP falhar; o **Bloco 2** reinicia o backend com `ERP_SIM_MODE=always-fail` especificamente para mostrar o pedido esgotando as 3 tentativas e sendo marcado como `failed`. Os logs de framework do Nest (mapeamento de rotas, etc.) foram omitidos por não agregarem nada à evidência; o resto é exatamente o que apareceu no terminal, incluindo os timestamps reais.
+A captura tem três partes: o **Bloco 1** sobe o backend com `ERP_SIM_MODE=always-success` e cobre o caminho feliz e os erros que não dependem do ERP falhar; o **Bloco 2** reinicia o backend com `ERP_SIM_MODE=always-fail` para mostrar o pedido esgotando as 3 tentativas e sendo marcado como `failed`; o **Bloco 3** reinicia de novo com `ERP_SIM_MODE=always-timeout` para mostrar o caso mais literal de "processamento lento" — o `Promise.race` do backend perdendo contra o relógio, não o ERP respondendo negativamente. Os logs de framework do Nest (mapeamento de rotas, etc.) foram omitidos por não agregarem nada à evidência; o resto é exatamente o que apareceu no terminal, incluindo os timestamps reais.
 
 ## Índice
 
@@ -16,6 +16,7 @@ A captura tem duas partes: o **Bloco 1** sobe o backend com `ERP_SIM_MODE=always
 8. [Idempotência: reenvio da mesma chave](#8-idempotência-reenvio-da-mesma-chave)
 9. [Pedido inexistente](#9-pedido-inexistente)
 10. [ERP esgota as 3 tentativas → pedido `failed`](#10-erp-esgota-as-3-tentativas--pedido-failed)
+11. [ERP sempre lento (`always-timeout`) → `Promise.race` perdendo contra o relógio](#11-erp-sempre-lento-always-timeout--promiserace-perdendo-contra-o-relógio)
 
 ---
 
@@ -223,6 +224,52 @@ Backend reiniciado com `ERP_SIM_MODE=always-fail` (só para este cenário — é
 
 ---
 
+## 11. ERP sempre lento (`always-timeout`) → `Promise.race` perdendo contra o relógio
+
+Backend reiniciado com `ERP_SIM_MODE=always-timeout` — o `erp-mock` dorme 10s antes de responder a cada tentativa, sempre mais que o `timeoutMs=3000` do backend. `capinha-preta`, chave `evid-erp-slow`. Três coisas para reparar nesta captura, na ordem em que aparecem:
+
+1. Cada tentativa é marcada como falha em ~3s, não em 10s — é o `Promise.race` desistindo no timeout, não o `erp-mock` respondendo rápido.
+2. O pedido inteiro termina `failed`/`ERP_PROCESSING_FAILED` em ~12s (3 tentativas de 3s + backoff de 1s/2s), exatamente o pior caso documentado.
+3. As linhas `erp-mock respondeu — durationMs=10011/10005/10004` chegam **depois** do pedido já ter sido marcado `failed` — o `Promise.race` não cancela a chamada HTTP perdedora, só para de esperar por ela; a resposta do `erp-mock` chega de qualquer forma, tarde demais para importar. Isso é esperado, não um bug: o retry loop já seguiu em frente com o resultado do timeout.
+
+```
+[Nest] 63877  LOG   [HTTP] --> POST /checkout requestId=a6343ab7 ip=::1
+[Nest] 63877  LOG   [CheckoutService] Checkout recebido — requestId=a6343ab7 productId=capinha-preta quantity=1 idempotencyKey=evid-erp-slow
+[Nest] 63877  LOG   [OrdersService] Pedido criado — orderId=ord_000001 productId=capinha-preta quantity=1 status=pending
+[Nest] 63877  LOG   [ProductsService] Estoque reservado — orderId=ord_000001 productId=capinha-preta quantity=1 remainingAvailable=4 ttlMs=120000
+[Nest] 63877  LOG   [CheckoutService] Checkout aceito, status=pending; liquidação com o ERP inicia em segundo plano — orderId=ord_000001 requestId=a6343ab7 productId=capinha-preta quantity=1 idempotencyKey=evid-erp-slow
+[Nest] 63877  LOG   [CheckoutService] Chamando o ERP — orderId=ord_000001 attempt=1/3 timeoutMs=3000
+[Nest] 63877  DEBUG [ErpService] Chamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-timeout
+[Nest] 63877  LOG   [HTTP] <-- POST /checkout requestId=a6343ab7 status=202 durationMs=4.2
+{"orderId":"ord_000001","status":"pending","statusUrl":"/orders/ord_000001"}
+
+[Nest] 63877  WARN  [CheckoutService] Tentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=1/3
+[Nest] 63877  LOG   [CheckoutService] Aguardando antes da próxima tentativa — orderId=ord_000001 backoffMs=1000
+
+[Nest] 63877  LOG   [CheckoutService] Chamando o ERP — orderId=ord_000001 attempt=2/3 timeoutMs=3000
+[Nest] 63877  DEBUG [ErpService] Chamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-timeout
+[Nest] 63877  WARN  [CheckoutService] Tentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=2/3
+[Nest] 63877  LOG   [CheckoutService] Aguardando antes da próxima tentativa — orderId=ord_000001 backoffMs=2000
+
+[Nest] 63877  LOG   [CheckoutService] Chamando o ERP — orderId=ord_000001 attempt=3/3 timeoutMs=3000
+[Nest] 63877  DEBUG [ErpService] Chamando erp-mock — url=http://localhost:4000/erp/orders simMode=always-timeout
+[Nest] 63877  DEBUG [ErpService] erp-mock respondeu — httpStatus=200 success=true durationMs=10011
+[Nest] 63877  WARN  [CheckoutService] Tentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=ord_000001 attempt=3/3
+[Nest] 63877  LOG   [ProductsService] Reserva liberada, estoque volta a ficar disponível — orderId=ord_000001 productId=capinha-preta quantity=1
+[Nest] 63877  WARN  [OrdersService] Pedido marcado como failed — orderId=ord_000001 status=failed errorCode=ERP_PROCESSING_FAILED errorMessage="Não conseguimos concluir seu pedido agora. Tente novamente em instantes."
+[Nest] 63877  ERROR [CheckoutService] Pedido falhou definitivamente após esgotar as tentativas; estoque liberado — orderId=ord_000001 attempts=3
+
+-- chegam depois, tarde demais: o erp-mock finalmente respondendo às tentativas 2 e 3, já ignoradas --
+[Nest] 63877  DEBUG [ErpService] erp-mock respondeu — httpStatus=200 success=true durationMs=10005
+[Nest] 63877  DEBUG [ErpService] erp-mock respondeu — httpStatus=200 success=true durationMs=10004
+
+[Nest] 63877  LOG   [HTTP] --> GET /orders/ord_000001 requestId=f7b457ae ip=::1
+[Nest] 63877  LOG   [HTTP] <-- GET /orders/ord_000001 requestId=f7b457ae status=200 durationMs=0.6
+{"orderId":"ord_000001","status":"failed","error":{"code":"ERP_PROCESSING_FAILED","message":"Não conseguimos concluir seu pedido agora. Tente novamente em instantes."}}
+```
+
+---
+
 ## Como essa captura foi gerada
 
-`scratch-capture-logs.sh` (não commitado — é um script de scratch, não parte do produto) sobe `erp-mock`, depois o `backend` duas vezes (uma por `ERP_SIM_MODE`), dispara os `curl`s acima na ordem, faz polling real em `GET /orders/:id` até cada pedido sair de `pending`, e salva a saída bruta do terminal em [`logs-backend.txt`](logs-backend.txt) — este `.md` é a mesma captura, sem o ruído de inicialização do framework e com uma explicação ao lado de cada trecho. Nenhuma linha de log foi editada; os `requestId`/`orderId`/timestamps são os reais dessa execução.
+`scratch-capture-logs.sh` (não commitado — é um script de scratch, não parte do produto) sobe `erp-mock`, depois o `backend` três vezes (uma por `ERP_SIM_MODE`), dispara os `curl`s acima na ordem, faz polling real em `GET /orders/:id` até cada pedido sair de `pending`, e salva a saída bruta do terminal em [`logs-backend.txt`](logs-backend.txt) — este `.md` é a mesma captura, sem o ruído de inicialização do framework e com uma explicação ao lado de cada trecho. Nenhuma linha de log foi editada; os `requestId`/`orderId`/timestamps são os reais dessa execução.

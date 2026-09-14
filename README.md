@@ -135,7 +135,7 @@ O cenário `erp-failure` só é determinístico se o backend tiver sido iniciado
 
 ## Demonstrando a simulação de lentidão/instabilidade do ERP
 
-Esse é um pré-requisito explícito do case, então aqui vai o passo a passo direto, sem precisar ler o código pra confirmar:
+Esse é um pré-requisito explícito do case, então aqui vai o passo a passo direto:
 
 O `erp-mock` (`erp-mock/src/app.ts`, endpoint `POST /erp/orders`) simula quatro modos, escolhidos pelo header `X-Erp-Simulate-Mode` que o backend envia em toda chamada — o backend, por sua vez, decide qual mandar a partir das variáveis de ambiente `ERP_SIM_MODE`/`ERP_SIM_DELAY_MS` com que foi iniciado:
 
@@ -169,7 +169,21 @@ cd backend && ERP_SIM_MODE=always-timeout npm run start:dev
 scripts/scenarios.sh erp-slow
 ```
 
-O script acompanha o pedido até ele terminar `failed`, e aponta exatamente o que procurar no log do backend (`attempt=`, `durationMs=` próximo de 3000, `backoffMs=`).
+O script acompanha o pedido até ele terminar `failed`. No log do backend, cada tentativa desiste em ~3s (não em 10s — é o timeout do backend vencendo, não o `erp-mock` respondendo rápido), e a resposta real do `erp-mock` chega bem depois, já ignorada:
+
+```
+19:14:41  LOG   [CheckoutService] Chamando o ERP — orderId=ord_000001 attempt=1/3 timeoutMs=3000
+19:14:44  WARN  [CheckoutService] Tentativa de liquidação falhou — orderId=ord_000001 attempt=1/3
+19:14:44  LOG   [CheckoutService] Aguardando antes da próxima tentativa — orderId=ord_000001 backoffMs=1000
+19:14:45  LOG   [CheckoutService] Chamando o ERP — orderId=ord_000001 attempt=2/3 timeoutMs=3000
+19:14:48  WARN  [CheckoutService] Tentativa de liquidação falhou — orderId=ord_000001 attempt=2/3
+19:14:50  LOG   [CheckoutService] Chamando o ERP — orderId=ord_000001 attempt=3/3 timeoutMs=3000
+19:14:53  WARN  [CheckoutService] Tentativa de liquidação falhou — orderId=ord_000001 attempt=3/3
+19:14:53  ERROR [CheckoutService] Pedido falhou definitivamente após esgotar as tentativas — orderId=ord_000001 attempts=3
+19:14:55  DEBUG [ErpService] erp-mock respondeu — httpStatus=200 success=true durationMs=10005   # tarde demais, já ignorada
+```
+
+Captura completa (todas as linhas, sem cortes) em [`evidencias/logs-backend.md`, seção 11](evidencias/logs-backend.md#11-erp-sempre-lento-always-timeout--promiserace-perdendo-contra-o-relógio).
 
 **3. Sem reiniciar nada — o modo `random` padrão já demonstra a instabilidade ao vivo:**
 
@@ -179,7 +193,7 @@ scripts/scenarios.sh erp-random
 
 Dispara 3 checkouts seguidos contra o backend já rodando do jeito padrão e mostra status/duração de cada um lado a lado — a variação entre eles **é** a simulação.
 
-Uma captura real de terminal cobrindo `ERP_SIM_MODE=always-success` e `always-fail` está em [`evidencias/logs-backend.md`](evidencias/logs-backend.md), comentada trecho a trecho.
+Captura real de terminal cobrindo os três modos (`always-success`, `always-fail`, `always-timeout`) está em [`evidencias/logs-backend.md`](evidencias/logs-backend.md), comentada trecho a trecho.
 
 ## Arquitetura e principais decisões técnicas
 
@@ -279,12 +293,9 @@ A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bru
 | Validação de quantidade inválida | [`05-validacao-quantidade-invalida.webm`](evidencias/05-validacao-quantidade-invalida.webm) | `quantity=0` enviado de verdade ao backend (sem bloqueio no front), volta `400` e a UI mostra a mensagem exata da validação |
 | ERP lento (real) | [`06-erp-lento-timeout-real.webm`](evidencias/06-erp-lento-timeout-real.webm) | Ver a [seção dedicada acima](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) — 3 tentativas reais perdendo a corrida contra o timeout, sem nenhuma simulação no navegador |
 
-![Botão desabilita imediatamente ao clicar em Comprar](evidencias/04-duplo-clique-bloqueado.gif)
-![Mensagem de validação para quantidade zero](evidencias/05-validacao-quantidade-invalida.gif)
-
 Essas gravações não substituem a suíte automatizada — são uma amostra point-in-time de uma execução; a fonte da verdade é sempre rodar `npm test`/`npm run test:erp-lento` em `e2e/` (ou as suítes unitárias/e2e de cada pacote, na seção anterior).
 
-[`evidencias/logs-backend.md`](evidencias/logs-backend.md) complementa isso do lado do backend: captura real do terminal rodando o backend duas vezes (`ERP_SIM_MODE=always-success` e `always-fail`) e disparando `curl` contra cada cenário, comentada trecho a trecho.
+[`evidencias/logs-backend.md`](evidencias/logs-backend.md) complementa isso do lado do backend: captura real do terminal rodando o backend três vezes (`ERP_SIM_MODE=always-success`, `always-fail` e `always-timeout`) e disparando `curl` contra cada cenário, comentada trecho a trecho.
 
 | Cenário coberto | Resultado |
 |---|---|
