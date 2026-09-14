@@ -294,6 +294,22 @@ Esse é o mesmo princípio do plano de arquitetura incremental documentado em [`
 
 </details>
 
+### Por que NestJS, e não Express puro, no backend?
+
+Agilidade de implementação: o Nest roda sobre o próprio Express por baixo (`@nestjs/platform-express`, o adapter padrão — não é um substituto, é uma camada de estrutura em cima dele) e resolve nativamente, via decorators, quatro coisas que em Express puro seriam bibliotecas separadas para escolher, integrar e manter sincronizadas à mão: injeção de dependências, modularização, validação de entrada e documentação da API.
+
+<details>
+<summary>Por que isso importa (detalhes)?</summary>
+
+- **Injeção de dependências nativa** — cada `Service` recebe suas dependências pelo construtor, resolvidas automaticamente pelo container do Nest a partir do que cada `@Module` declara em `providers`/`imports`, sem fábrica manual escrita à mão. Exemplo real: `ProductsModule` injeta `ErpService` num provider assíncrono (`backend/src/products/products.module.ts`) puramente por declaração.
+- **Validação e documentação a partir da mesma fonte** — os decorators de `class-validator` (`@IsInt`, `@IsPositive`, ...) e de `@nestjs/swagger` (`@ApiProperty`, ...) convivem na mesma classe DTO (ex. `backend/src/checkout/checkout.dto.ts`). O `ValidationPipe` global (`backend/src/bootstrap.ts`) usa os primeiros para rejeitar payload inválido em runtime; o `SwaggerModule` usa os segundos para gerar a [documentação interativa](#itens-bônus-entregues) a partir do mesmíssimo arquivo — zero duplicação, documentação que não tem como ficar desatualizada em relação ao código.
+- **Contrato de erro centralizado** — um único `HttpExceptionFilter` global (`app.useGlobalFilters` em `bootstrap.ts`) mapeia toda exceção de domínio para o corpo de erro HTTP, em vez de tratamento espalhado por middleware customizado.
+- **Testes de integração contra a aplicação real** — `Test.createTestingModule({ imports: [AppModule] })` (`backend/test/utils/create-test-app.ts`) sobe a aplicação de verdade, com o mesmo grafo de dependências de produção, em vez de recriar rotas e validação à mão só para os testes.
+
+Em Express puro, cada um desses pontos seria uma biblioteca a mais para integrar (`express-validator`, `swagger-jsdoc`, middleware de erro próprio) e manter sincronizada manualmente — viável, mas é tempo de infraestrutura de framework, não de regra de negócio. É por isso que `erp-mock/` continua em Express puro e não vira uma segunda aplicação NestJS: é um dublê de teste de poucas linhas, sem regra de negócio nenhuma para essa agilidade importar (ver ["Por que `erp-mock` é um serviço HTTP real separado"](#por-que-erp-mock-é-um-serviço-http-real-separado-e-não-uma-simulação-in-process) acima).
+
+</details>
+
 ### Arquitetura do backend: Controller, Service, Module
 
 O backend segue uma estrutura NestJS direta — um `Controller`, um `Service`, um `Module` por assunto (`products/`, `orders/`, `idempotency/`, `erp/`, `checkout/`). Cada `Controller` faz apenas roteamento: nenhuma regra de negócio, nenhum mapeamento de erro para status HTTP (isso é centralizado uma única vez, no `HttpExceptionFilter` global). Cada `Service` é dono tanto da lógica de negócio quanto dos dados sobre os quais ela opera, em um só lugar, sem camadas de indireção adicionais entre o controller e a regra de negócio. Erros de domínio (produto não encontrado, estoque insuficiente, pedido não encontrado) são exceções tipadas que estendem `HttpException` diretamente, e métodos/variáveis usam o vocabulário real do negócio (`reserveStock`, `settleWithErp`, `idempotencyKey`) em vez de nomenclatura CRUD genérica.
