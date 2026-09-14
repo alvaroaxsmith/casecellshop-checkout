@@ -1,6 +1,6 @@
 # Decisões Técnicas Detalhadas — ADRs e Matriz de Risco
 
-Este arquivo guarda a camada mais formal de análise que sustenta as respostas do case tecnico — registro de decisão por decisão (ADR) e uma matriz de risco antes/depois — para quem quiser entender o raciocínio completo por trás de cada escolha, incluindo as suposições que fiz e o que me faria decidir diferente.
+Este arquivo guarda a camada mais formal de análise que sustenta as respostas do case tecnico parte 1.A — registro de decisão por decisão (ADR) e uma matriz de risco antes/depois — para quem quiser entender o raciocínio completo por trás de cada escolha, incluindo as suposições que fiz e o que me faria decidir diferente.
 
 Formato de cada ADR: **Título, Status, Contexto, Decisão, Consequências, Compliance** — mais **Premissa** e **Condição de reversão** (ver [`fundamentals-of-software-architecture.md`](fundamentals-of-software-architecture.md), seção 3).
 
