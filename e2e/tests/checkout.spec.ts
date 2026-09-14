@@ -80,4 +80,34 @@ test.describe("Checkout", () => {
 
     await expect(page.getByRole("status")).toHaveText("Compra confirmada!", { timeout: 16_000 });
   });
+
+  test("desabilita o botão de comprar imediatamente após o clique, prevenindo duplo clique", async ({ page }) => {
+    await page.goto("/");
+
+    await page.locator('label:has(input[value="capinha-preta"])').click();
+    await page.fill("#quantity-input", "1");
+
+    const buyButton = page.getByRole("button", { name: /Comprar|Processando/ });
+    await buyButton.click();
+
+    // Sem esperar o desfecho final: o botão precisa já estar desabilitado e
+    // com o texto de "Processando..." assim que o clique acontece, para que
+    // um segundo clique acidental (duplo clique, dedo pesado) não dispare um
+    // segundo checkout.
+    await expect(buyButton).toBeDisabled();
+    await expect(buyButton).toHaveText("Processando...");
+  });
+
+  test("mostra mensagem de validação para uma quantidade inválida", async ({ page }) => {
+    await page.goto("/");
+
+    await page.locator('label:has(input[value="capinha-preta"])').click();
+    await page.fill("#quantity-input", "0");
+    await page.click('button:has-text("Comprar")');
+
+    // Round-trip completo contra o backend real (a validação de @IsPositive
+    // em checkout.dto.ts roda no servidor — o front não bloqueia isso antes
+    // de enviar), não uma checagem simulada no navegador.
+    await expect(page.getByRole("alert")).toHaveText("A quantidade deve ser maior que zero.");
+  });
 });
