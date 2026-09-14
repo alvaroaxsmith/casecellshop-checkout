@@ -50,8 +50,8 @@ cmd_happy() {
   fi
   local order_id
   order_id=$(json_field "$RESP_BODY" "orderId")
-  info "aguardando o backend liquidar com o ERP (até ~8s: 3 tentativas, timeout 3s cada, com backoff)..."
-  for _ in $(seq 1 16); do
+  info "aguardando o backend liquidar com o ERP (até ~17s no pior caso: 3 tentativas de até 3s + backoffs de 1s/2s)..."
+  for _ in $(seq 1 34); do
     do_curl GET "/orders/${order_id}"
     local status
     status=$(json_field "$RESP_BODY" "status")
@@ -67,7 +67,7 @@ cmd_happy() {
     fi
     sleep 0.5
   done
-  warn "pedido $order_id ainda pending depois de 8s — confira o backend"
+  warn "pedido $order_id ainda pending depois de 17s — confira o backend"
 }
 
 cmd_out_of_stock() {
@@ -150,8 +150,8 @@ cmd_erp_failure() {
   do_curl POST /checkout '{"productId":"capinha-transparente","quantity":1,"idempotencyKey":"'"$key"'"}'
   local order_id
   order_id=$(json_field "$RESP_BODY" "orderId")
-  info "pedido criado: ${order_id} — aguardando o backend esgotar as tentativas (até ~8s)..."
-  for _ in $(seq 1 16); do
+  info "pedido criado: ${order_id} — aguardando o backend esgotar as tentativas (até ~17s no pior caso)..."
+  for _ in $(seq 1 34); do
     do_curl GET "/orders/${order_id}"
     local status
     status=$(json_field "$RESP_BODY" "status")
@@ -166,7 +166,7 @@ cmd_erp_failure() {
     fi
     sleep 0.5
   done
-  warn "pedido ${order_id} ainda pending depois de 8s"
+  warn "pedido ${order_id} ainda pending depois de 17s"
 }
 
 cmd_status() {
