@@ -66,19 +66,19 @@ Checklist derived from [`plan.md`](plan.md).
 
 ## Task 4: Frontend scaffold and product list
 
-- [ ] Create the frontend package (`npm init`, install dependencies)
-- [ ] Write the scripts in `frontend/package.json`
-- [ ] Write `frontend/tsconfig.json`
-- [ ] Write `frontend/vite.config.ts`
-- [ ] Write `frontend/index.html`
-- [ ] Write `frontend/test/setup.ts`
-- [ ] Write the (failing) test for the product list
-- [ ] Run the test and confirm it fails
-- [ ] Write `frontend/src/api.ts`
-- [ ] Write `frontend/src/App.tsx` (product list only for now)
-- [ ] Write `frontend/src/main.tsx`
-- [ ] Run the test and confirm it passes
-- [ ] Commit
+- [x] Create the frontend package (`npm init`, install dependencies)
+- [x] Write the scripts in `frontend/package.json`
+- [x] Write `frontend/tsconfig.json`
+- [x] Write `frontend/vite.config.ts`
+- [x] Write `frontend/index.html`
+- [x] Write `frontend/test/setup.ts`
+- [x] Write the (failing) test for the product list
+- [x] Run the test and confirm it fails
+- [x] Write `frontend/src/api.ts`
+- [x] Write `frontend/src/App.tsx` (product list only for now)
+- [x] Write `frontend/src/main.tsx`
+- [x] Run the test and confirm it passes
+- [x] Commit
 
 ## Task 5: Frontend checkout flow — button, loading, messages
 
