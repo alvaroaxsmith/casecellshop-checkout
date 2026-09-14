@@ -50,7 +50,7 @@ describe("CheckoutService", () => {
   });
 
   it("throws an out-of-stock error and marks the order failed when the reservation fails", async () => {
-    products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 0 });
+    products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 0, imageUrl: "", imageAlt: "" });
     const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
     orders.createOrder.mockReturnValue(order);
     products.reserveStock.mockReturnValue(false);

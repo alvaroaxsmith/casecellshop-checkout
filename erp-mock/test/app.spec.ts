@@ -57,3 +57,19 @@ describe("GET /health", () => {
     expect(res.body.status).toBe("ok");
   });
 });
+
+describe("GET /erp/products", () => {
+  it("returns the ERP's product catalog", async () => {
+    const res = await request(app).get("/erp/products");
+
+    expect(res.status).toBe(200);
+    expect(res.body.products.length).toBeGreaterThan(0);
+    const first = res.body.products[0];
+    expect(first).toHaveProperty("id");
+    expect(first).toHaveProperty("name");
+    expect(first).toHaveProperty("priceCents");
+    expect(first).toHaveProperty("stock");
+    expect(first).toHaveProperty("imageUrl");
+    expect(first).toHaveProperty("imageAlt");
+  });
+});

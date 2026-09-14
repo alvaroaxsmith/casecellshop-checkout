@@ -23,5 +23,7 @@ describe("GET /products (e2e)", () => {
     expect(first).toHaveProperty("name");
     expect(first).toHaveProperty("priceCents");
     expect(first).toHaveProperty("stock");
+    expect(first).toHaveProperty("imageUrl");
+    expect(first).toHaveProperty("imageAlt");
   });
 });
