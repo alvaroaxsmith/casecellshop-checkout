@@ -18,6 +18,17 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
 
 ## Instalação e execução
 
+### Rodando tudo com um comando
+
+```bash
+npm run install:all   # instala erp-mock, backend e frontend de uma vez
+npm run dev            # sobe os três juntos, com saída colorida e prefixada
+```
+
+Os dois comandos rodam na raiz do repositório (`package.json` novo, com [`concurrently`](https://www.npmjs.com/package/concurrently) orquestrando os três processos). `Ctrl+C` derruba os três de uma vez. É equivalente ao passo a passo manual abaixo — use aquele se quiser rodar/reiniciar um serviço isoladamente, ou este para o dia a dia.
+
+### Passo a passo manual
+
 Cada pacote é instalado e iniciado de forma independente, em seu próprio terminal, **nesta ordem** — o backend busca o catálogo de produtos no `erp-mock` assim que sobe (e falha ao iniciar se não conseguir), então `erp-mock` precisa estar de pé primeiro; o frontend precisa do backend para qualquer dado real.
 
 **1. ERP mock — porta 4000**
@@ -86,6 +97,26 @@ npm test
 ```
 
 Diferente das suítes acima, essa não testa uma unidade nem um contrato HTTP isolado — ela sobe `erp-mock`, `backend` e `frontend` como processos reais (via `webServer` do `playwright.config.ts`) e dirige um navegador Chromium contra a UI, cobrindo o caminho feliz, bloqueio por falta de estoque e uma falha simulada do ERP com recuperação. Por isso ela precisa que as portas 4000/3001/5173 estejam livres antes de rodar (encerre qualquer instância manual dos três serviços da seção "Instalação e execução"). Cada execução grava vídeo, screenshot e trace de cada teste em `e2e/test-results/` (git-ignorado); veja `evidencias/` na raiz do repositório para uma amostra já gravada.
+
+## Cenários de teste manual
+
+Com os três serviços de pé (`npm run dev`, numa aba separada), `scripts/scenarios.sh` dispara cenários reais contra a API via `curl`, com saída legível — útil pra explorar o comportamento na mão sem escrever `curl` a cada vez:
+
+```bash
+scripts/scenarios.sh all   # roda todos os cenários abaixo em sequência
+```
+
+| Comando | O que faz |
+|---|---|
+| `products` | `GET /products`, formatado |
+| `happy` | Checkout de 1 unidade, com polling até `confirmed` |
+| `out-of-stock` | Pede mais unidades do que há em estoque disponível |
+| `concurrency` | Dispara `estoque+1` requisições concorrentes pela última unidade, conta `202` vs. `409` |
+| `idempotency` | Duas chamadas com a mesma `Idempotency-Key`, confirma que é o mesmo `orderId` |
+| `erp-failure` | Roda um checkout e reporta o desfecho real do ERP |
+| `status <orderId>` | Consulta um pedido específico |
+
+O cenário `erp-failure` só é determinístico se o backend tiver sido iniciado com `ERP_SIM_MODE=always-fail npm run dev` (ver "Instalação e execução" acima) — com o modo `random` padrão, o script avisa isso na tela e reporta o que aconteceu de verdade. O script não sobe nem derruba nenhum processo — só assume que `npm run dev` já está rodando em outra aba.
 
 ## Arquitetura e principais decisões técnicas
 

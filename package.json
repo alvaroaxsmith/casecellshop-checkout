@@ -1,0 +1,11 @@
+{
+  "name": "casecellshop",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix erp-mock && npm install --prefix backend && npm install --prefix frontend",
+    "dev": "concurrently -n erp-mock,backend,frontend -c blue,green,magenta \"npm --prefix erp-mock run dev\" \"npm --prefix backend run start:dev\" \"npm --prefix frontend run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
