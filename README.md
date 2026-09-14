@@ -8,7 +8,7 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
 
 | Item bônus | Onde ver | Resultado |
 |---|---|---|
-| Diagrama de arquitetura | [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas) | Fluxo completo usuário → frontend → backend → `erp-mock`, com a fronteira em memória explícita |
+| Diagrama de arquitetura | [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas) | Fluxo completo usuário → frontend → backend → `erp-mock`, com o Redis como fronteira de estado explícita |
 | Logs estruturados | [Rastreabilidade](#rastreabilidade-logs-estruturados-em-todo-o-fluxo) · [`evidencias/logs-backend.md`](evidencias/logs-backend.md) | Captura real cobrindo caminho feliz, os 4 tipos de erro, concorrência pela última unidade, idempotência e esgotamento de retry com o ERP |
 | Endpoint de status do pedido | `GET /orders/:id` | Retorna `pending` / `confirmed` / `failed` (com `error.code`/`error.message` quando falha) |
 | Teste de concorrência | [Armazenamento: Redis](#armazenamento-redis-não-mais-em-memória) | Várias requisições simultâneas pela última unidade de estoque — exatamente uma reserva passa, as demais recusadas com `409` (agora garantido por um script Lua atômico, não pelo event loop do Node) |
@@ -143,12 +143,12 @@ Só nesta branch, mais três comandos que exercitam o que o Redis muda de verdad
 flowchart LR
     U(["Usuário"]) --> FE["Frontend\nReact + Tailwind"]
     FE -- "/api/* (proxy do Vite)" --> BE["Backend\nNestJS"]
-    BE -- "GET /erp/products\n(catálogo, só no boot)" --> ERP["erp-mock\nExpress"]
+    BE -- "GET /erp/products\n(cache-aside, TTL 30s)" --> ERP["erp-mock\nExpress"]
     BE -- "POST /erp/orders\n(liquidação: timeout 3s, retry, backoff)" --> ERP
-    BE -.->|"Map em memória:\nestoque · pedidos · idempotência"| BE
+    BE -- "Script Lua atômico:\nestoque · pedidos · idempotência" --> REDIS["Redis\n(Docker)"]
 ```
 
-*A reserva de estoque, os pedidos e as chaves de idempotência vivem inteiramente dentro do processo do backend — o `erp-mock` nunca é consultado durante a checagem-e-reserva, só na liquidação em segundo plano e na busca do catálogo no boot (ver as duas seções abaixo).*
+*A reserva de estoque, os pedidos e as chaves de idempotência vivem no Redis, não mais dentro do processo do backend — o `erp-mock` nunca é consultado durante a checagem-e-reserva (um script Lua atômico no Redis, ver "Armazenamento" abaixo), só na liquidação em segundo plano e nos refreshes periódicos do catálogo.*
 
 ### Por que `erp-mock` é um serviço HTTP real separado, e não uma simulação in-process
 
@@ -207,7 +207,7 @@ Uma captura real desses logs, cobrindo o caminho feliz, os quatro tipos de erro 
 
 ### Fora de escopo
 
-- **Autenticação, pagamento real, deploy em nuvem, Docker obrigatório.**
+- **Autenticação, pagamento real, deploy em nuvem.** (Docker deixa de ser opcional nesta branch — é como o Redis local sobe; ver "Pré-requisitos" para a alternativa sem Docker Desktop.)
 - **Carrinho com múltiplos itens** — o checkout permanece single-item (`productId` + `quantity`) porque nenhuma das garantias centrais deste projeto (consistência de estoque, idempotência, concorrência, contrato de erro) depende de um carrinho; adicionar um transformaria a reserva indivisível de um único produto em um problema de write-skew multi-objeto, exigindo um redesign, não uma extensão incremental.
 - **Fila durável (RabbitMQ/BullMQ), banco de dados dedicado, sincronização por CDC com um ERP real** — pertencem a uma evolução de produção deste desenho, não a este mini-projeto de código.
 - **Um cron de reconciliação automatizado de verdade**, rodando como processo agendado real — documentado aqui como próximo passo; `GET /orders/:id` já cobre a necessidade imediata de ver o status atual de um pedido.
