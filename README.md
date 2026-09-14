@@ -29,6 +29,7 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
 | Logs estruturados | [Rastreabilidade](#rastreabilidade-logs-estruturados-em-todo-o-fluxo) · [`evidencias/logs-backend.md`](evidencias/logs-backend.md) | Captura real cobrindo caminho feliz, os 4 tipos de erro, concorrência pela última unidade, idempotência e esgotamento de retry com o ERP |
 | Endpoint de status do pedido | `GET /orders/:id` | Retorna `pending` / `confirmed` / `failed` (com `error.code`/`error.message` quando falha) |
 | Teste de concorrência | [Armazenamento em memória](#armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo) | Várias requisições simultâneas pela última unidade de estoque — exatamente uma reserva passa, as demais recusadas com `409` |
+| Documentação interativa da API (Swagger/OpenAPI) | `http://localhost:3001/docs` (schema em `/docs-json`, com o backend rodando) | Gerada a partir dos mesmos decorators dos controllers — sempre sincronizada com o código, nunca desatualizada |
 
 ---
 
@@ -424,3 +425,5 @@ A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bru
 - [`specs/spec.md`](specs/spec.md) — a especificação comportamental completa: histórias de usuário, decisões de implementação, modelo de dados, decisões de teste, lista de fora de escopo.
 - [`specs/constitution.md`](specs/constitution.md) — governança do projeto: stack, diretrizes de código, arquitetura Controller/Service/Module, regras de teste.
 - [`PROMPTS.md`](PROMPTS.md) — como a IA foi usada para construir este projeto.
+
+> **Nota:** os documentos acima em `specs/` (spec-driven development — `spec.md`, `constitution.md`, além de `plan.md`/`tasks.md`) estão em inglês de propósito, diferente do restante do repositório. São documentos de processo, relidos por múltiplos subagentes de IA ao longo da execução — inglês tokeniza de forma mais eficiente e tende a produzir raciocínio mais consistente nesse uso. Os documentos voltados para quem avalia a entrega (este README, `PROMPTS.md`) ficam em português. Rationale completo em [`PROMPTS.md`, "Nota sobre o idioma dos documentos"](PROMPTS.md#nota-sobre-o-idioma-dos-documentos).
