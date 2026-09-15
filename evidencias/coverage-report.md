@@ -17,6 +17,19 @@ As três primeiras ganharam testes novos nos arquivos já existentes (`products.
 
 Depois, os modos `always-http-error`/`always-reset` do `erp-mock` (ver seção 4 de ["Demonstrando a simulação de lentidão/instabilidade do ERP"](../README.md#4-dois-modos-de-instabilidade-adicionais--always-http-error-e-always-reset) no README) ganharam dois testes e2e novos em `checkout.e2e-spec.ts`, subindo a suíte e2e de 15 para 17 testes e fechando, contra o `erp-mock` real, o `if (!res.ok)` de `ErpService.call` que antes só era exercitado com `fetch` mockado (`erp.service.ts` foi de 85.71% para **92.85%** statements na cobertura e2e).
 
+Numa terceira rodada, a decisão de escopo original ("só `ProductsService`/`CheckoutService` têm unitário próprio, o resto é e2e-only") foi revisitada porque valia a pena testar diretamente, e não só via HTTP, um conjunto de branches pequenas e baratas de cobrir:
+
+| Lacuna | Onde | O que fechou |
+|---|---|---|
+| `OrdersService` inteiro (14.81%) sem nenhum unitário próprio | `orders/orders.service.ts` | Arquivo novo `orders.service.spec.ts` — `createOrder`/`getOrder`/`markConfirmed`/`markFailed`, incluindo os guards contra chamar `markConfirmed`/`markFailed` duas vezes para o mesmo pedido (mesma classe de proteção que já tem um bug real registrado em `ProductsService`, ver `PROMPTS.md`). |
+| `IdempotencyService` inteiro (36.36%) sem nenhum unitário próprio | `idempotency/idempotency.service.ts` | Arquivo novo `idempotency.service.spec.ts` — hit/miss de `getStoredResponse`, `storeResponse`, e que chaves diferentes não vazam uma resposta pra outra. |
+| `OrderNotFoundException` nunca instanciada num teste unitário | `common/exceptions/app.exception.ts` | Arquivo novo `app.exception.spec.ts` testando o status HTTP e o corpo exato das 4 exceções de domínio de uma vez, em vez de depender de cada uma aparecer incidentalmente em outro teste. |
+| Sucesso do ERP na 1ª tentativa (linhas 97-100) e o `.catch()` de segurança em volta de `settleWithErp` (linha 72) nunca exercitados | `checkout/checkout.service.ts` | Dois testes novos em `checkout.service.spec.ts`: um com `erp.call()` resolvendo sucesso de cara; outro forçando `products.confirmReservation` a lançar de propósito, provando que o `.catch()` — que existe especificamente pra isso — realmente impede um bug ali de virar unhandled rejection. |
+| Branches de fallback (`?? "-"`, `instanceof Error ? ... : String(...)`) nunca exercitadas | `common/filters/http-exception.filter.ts` | Três testes novos: requisição sem `requestId`, uma `HttpException` sem `error.code`/`error.message` no corpo, e um valor não-`Error` lançado. |
+| Header `X-Erp-Simulate-Delay-Ms` nunca exercitado | `erp/erp.service.ts` | Um teste novo setando `ERP_SIM_DELAY_MS` e conferindo o header saindo na chamada `fetch`. |
+
+Resultado: cobertura unitária do `backend` foi de 81.27% → **97.71%** statements (59.45% → **89.18%** branches, 67.50% → **92.50%** functions), com 20 testes novos (19 → 39) — `orders`, `idempotency`, `erp` e `common/filters` foram todos a 100% em todas as quatro métricas.
+
 ## Pontas soltas encontradas e fechadas — frontend
 
 Investigando por que `*.service.ts`, `product-images.ts` e parte de `ProductCard.tsx`/`useCheckout.ts` apareciam com cobertura baixa (9–29%) — baixo o bastante pra também valer a pena ler linha por linha em vez de aceitar o número — três causas reais apareceram, nenhuma delas "decisão de escopo":
@@ -35,12 +48,12 @@ Resultado: cobertura do `frontend` foi de 82.11% → **95.69%** statements (82.3
 
 | Suíte | Statements | Branches | Functions | Lines | Testes |
 |---|---|---|---|---|---|
-| `backend` — unitários | 81.27% | 59.45% | 67.50% | 80.61% | 19 |
+| `backend` — unitários | 97.71% | 89.18% | 92.50% | 98.97% | 39 |
 | `backend` — e2e | 94.35% | 58.62% | 98.14% | 94.75% | 17 |
 | `erp-mock` | 96.96% | 76.92% | 83.33% | 96.87% | 9 |
 | `frontend` | 95.69% | 90.76% | 80.76% | 95.69% | 15 |
 
-O `backend` aparece duas vezes de propósito: os testes unitários cobrem `ProductsService`/`CheckoutService` (as duas com regra de negócio de verdade) mais `ErpService` e `HttpExceptionFilter` — enquanto `OrdersService`/`IdempotencyService`/controllers continuam cobertos de ponta a ponta pela suíte e2e via HTTP real, não por unitários próprios. As duas rodadas juntas são a cobertura de verdade do backend; nenhuma das duas sozinha conta a história completa.
+O `backend` aparece duas vezes de propósito: os testes unitários agora cobrem todos os `Service`s do app diretamente (`ProductsService`/`CheckoutService` com a regra de negócio, mais `OrdersService`/`IdempotencyService`/`ErpService`/`HttpExceptionFilter`) — enquanto os `Controller`s/`Module`s continuam cobertos de ponta a ponta só pela suíte e2e via HTTP real, sem unitário próprio (não têm lógica alguma além de roteamento). As duas rodadas juntas são a cobertura de verdade do backend; nenhuma das duas sozinha conta a história completa.
 
 ## `backend` — testes unitários (`npm run test:coverage`)
 
@@ -48,28 +61,28 @@ O `backend` aparece duas vezes de propósito: os testes unitários cobrem `Produ
 ---------------------------|---------|----------|---------|---------|-------------------
 File                       | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 ---------------------------|---------|----------|---------|---------|-------------------
-All files                  |   81.27 |    59.45 |    67.5 |   80.61 |
- checkout                  |   91.54 |    68.42 |   88.88 |   92.18 |
-  checkout.service.ts      |   91.54 |    68.42 |   88.88 |   92.18 | 72,97-100
- common/exceptions         |   88.88 |      100 |      75 |   88.88 |
-  app.exception.ts         |   88.88 |      100 |      75 |   88.88 | 26
- common/filters            |     100 |    55.55 |     100 |     100 |
-  http-exception.filter.ts |     100 |    55.55 |     100 |     100 | 12,18-26
- erp                       |     100 |       80 |     100 |     100 |
-  erp.service.ts           |     100 |       80 |     100 |     100 | 51-58
- idempotency               |   36.36 |        0 |       0 |   22.22 |
-  idempotency.service.ts   |   36.36 |        0 |       0 |   22.22 | 11-23
- orders                    |   14.81 |        0 |       0 |       8 |
-  orders.service.ts        |   14.81 |        0 |       0 |       8 | 17-53
+All files                  |   97.71 |    89.18 |    92.5 |   98.97 |
+ checkout                  |   98.59 |    78.94 |     100 |     100 |
+  checkout.service.ts      |   98.59 |    78.94 |     100 |     100 | 74-92,106
+ common/exceptions         |     100 |      100 |     100 |     100 |
+  app.exception.ts         |     100 |      100 |     100 |     100 |
+ common/filters            |     100 |      100 |     100 |     100 |
+  http-exception.filter.ts |     100 |      100 |     100 |     100 |
+ erp                       |     100 |      100 |     100 |     100 |
+  erp.service.ts           |     100 |      100 |     100 |     100 |
+ idempotency               |     100 |      100 |     100 |     100 |
+  idempotency.service.ts   |     100 |      100 |     100 |     100 |
+ orders                    |     100 |      100 |     100 |     100 |
+  orders.service.ts        |     100 |      100 |     100 |     100 |
  products                  |   92.85 |    81.81 |   76.92 |   95.83 |
   products.service.ts      |   92.85 |    81.81 |   76.92 |   95.83 | 36-40
 ---------------------------|---------|----------|---------|---------|-------------------
 
-Test Suites: 4 passed, 4 total
-Tests:       19 passed, 19 total
+Test Suites: 7 passed, 7 total
+Tests:       39 passed, 39 total
 ```
 
-`idempotency`/`orders` continuam sem teste unitário próprio — decisão de escopo deliberada, não esquecimento — cobertos abaixo, pela suíte e2e. `products.service.ts` 36-40 são `listProducts()`/`findProduct()` — getters triviais nunca chamados isoladamente nos unitários, só via e2e/controller; não valia a pena um teste só pra isso.
+`products.service.ts` 36-40 são `listProducts()`/`findProduct()` — getters triviais nunca chamados isoladamente nos unitários, só via e2e/controller; não valia a pena um teste só pra isso. `checkout.service.ts`'s poucos pontos de branch restantes (78.94%) são o fallback `BACKOFF_MS[attempt - 1] ?? 1000` (o array sempre tem entradas suficientes para as 3 tentativas documentadas, então esse `?? 1000` nunca é atingido de verdade) e o lado `instanceof Error ? err.stack : String(err)` que só dispara para uma rejeição não-`Error` — mesma classe de branch defensiva, baixo valor de perseguir mais.
 
 ## `backend` — testes e2e (`npm run test:e2e:coverage`)
 
@@ -116,7 +129,7 @@ Test Suites: 3 passed, 3 total
 Tests:       17 passed, 17 total
 ```
 
-`erp.service.ts` 36-37 (o `throw` de `fetchCatalog` quando o `erp-mock` não responde no boot) e `http-exception.filter.ts` 24-28 (o fallback 500) continuam descobertos aqui de propósito — nenhum cenário e2e consegue fazer o backend falhar o boot ou lançar uma exceção não tratada sem quebrar a própria suíte; essas duas linhas só ficam cobertas pelos unitários (`erp.service.spec.ts`/`http-exception.filter.spec.ts`). As demais linhas descobertas em `orders.service.ts`/`products.service.ts` são guards contra chamar `confirmReservation`/`releaseReservation`/`markConfirmed`/`markFailed` duas vezes para o mesmo pedido — nenhum fluxo real do app faz essa segunda chamada (`CheckoutService` só chama cada um deles uma vez por tentativa), então só são alcançáveis chamando o método diretamente, o que `products.service.spec.ts` já faz para o par `confirmReservation`/`releaseReservation` (histórico: um bug real de débito duplo já existiu aí, ver `PROMPTS.md`); o par equivalente em `OrdersService` fica sem teste dedicado, mesma decisão de escopo do resto do arquivo.
+`erp.service.ts` 36-37 (o `throw` de `fetchCatalog` quando o `erp-mock` não responde no boot) e `http-exception.filter.ts` 24-28 (o fallback 500) continuam descobertos aqui de propósito — nenhum cenário e2e consegue fazer o backend falhar o boot ou lançar uma exceção não tratada sem quebrar a própria suíte; essas duas linhas só ficam cobertas pelos unitários (`erp.service.spec.ts`/`http-exception.filter.spec.ts`, ambos a 100% na rodada unitária, ver acima). As demais linhas descobertas em `orders.service.ts`/`products.service.ts` são guards contra chamar `confirmReservation`/`releaseReservation`/`markConfirmed`/`markFailed` duas vezes para o mesmo pedido — nenhum fluxo real do app faz essa segunda chamada (`CheckoutService` só chama cada um deles uma vez por tentativa), então só são alcançáveis chamando o método diretamente; ambos os pares agora têm teste unitário dedicado cobrindo exatamente isso (`products.service.spec.ts`, `orders.service.spec.ts` — o de `ProductsService` existe porque um bug real de débito duplo já aconteceu ali, ver `PROMPTS.md`).
 
 ## `erp-mock` (`npm run test:coverage`)
 
@@ -180,7 +193,7 @@ Test Files  2 passed (2)
 ## O que fica de fora de propósito, e por quê
 
 - **`main.ts`/`bootstrap.ts` (backend) e `main.tsx` (frontend)** — código de inicialização de processo (listen na porta, montagem do React no DOM). Testar isso exigiria subir um servidor/DOM real só para exercitar duas linhas de chamada de framework; a suíte `e2e/` (Playwright) já prova que o processo sobe e funciona de ponta a ponta.
-- **`idempotency.service.ts`/`orders.service.ts` nos unitários** — decisão de escopo deliberada: só serviços com lógica de negócio própria (`ProductsService`, `CheckoutService`) mais os dois pontos de infraestrutura transversal com modo de falha documentado (`ErpService`, `HttpExceptionFilter`) ganham unitário dedicado; os demais são adaptadores finos, cobertos pela suíte e2e via HTTP real.
-- **Guards contra chamar `confirmReservation`/`releaseReservation`/`markConfirmed`/`markFailed` duas vezes para o mesmo pedido** — nenhum fluxo real do app faz uma segunda chamada (`CheckoutService` chama cada um exatamente uma vez por tentativa); alcançáveis só chamando o método diretamente, o que já acontece em `products.service.spec.ts` para o par de `ProductsService` (havia um bug real de débito duplo aí antes, ver `PROMPTS.md`) — o par equivalente em `OrdersService` fica sem teste dedicado, mesma decisão de escopo do resto do arquivo.
+- **`Controller`s/`Module`s do backend nos unitários** — decisão de escopo deliberada: eles não têm lógica além de roteamento (todo mapeamento erro→HTTP é centralizado no `HttpExceptionFilter`, que já tem unitário próprio), então são cobertos pela suíte e2e via HTTP real em vez de ganharem um dublê de teste que só reimplementaria a mesma chamada.
+- **`checkout.service.ts`'s `BACKOFF_MS[attempt - 1] ?? 1000` e o lado não-`Error` de `instanceof Error ? err.stack : String(err)`** — branches defensivas que não têm como acontecer com os valores hardcoded atuais (`BACKOFF_MS` sempre tem entradas para as 3 tentativas documentadas); baixo valor de perseguir mais.
 - **`erp-mock`'s delay aleatório sem override** (`randomBetween`) — todos os testes fixam o delay via header pra ficarem rápidos; o cálculo de um delay aleatório de verdade só roda fora da suíte, em uso normal sem overrides.
 - **`useCheckout.ts`'s branch de polling esgotado (15 tentativas)** e **a classe CSS de estoque baixo em `ProductCard.tsx`** — ver a seção `frontend` acima.

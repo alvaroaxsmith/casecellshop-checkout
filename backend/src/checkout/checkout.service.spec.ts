@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { CheckoutService } from "./checkout.service";
 import { ProductsService } from "../products/products.service";
 import { OrdersService, Order } from "../orders/orders.service";
@@ -120,6 +121,57 @@ describe("CheckoutService", () => {
       expect(products.releaseReservation).toHaveBeenCalledWith("ord_1");
       expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "ERP_PROCESSING_FAILED", expect.any(String));
     } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("confirms the order when the ERP call succeeds on the first attempt", async () => {
+    jest.useFakeTimers();
+    try {
+      products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" });
+      const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
+      orders.createOrder.mockReturnValue(order);
+      orders.getOrder.mockReturnValue(order);
+      products.reserveStock.mockReturnValue(true);
+      erp.call.mockResolvedValue({ success: true });
+
+      await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
+      // settleWithErp runs detached in the background — let its pending
+      // microtask (the already-resolved erp.call()) settle.
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(erp.call).toHaveBeenCalledTimes(1);
+      expect(products.confirmReservation).toHaveBeenCalledWith("ord_1");
+      expect(orders.markConfirmed).toHaveBeenCalledWith("ord_1");
+      expect(orders.markFailed).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("logs but does not crash when settleWithErp itself throws unexpectedly", async () => {
+    jest.useFakeTimers();
+    const errorSpy = jest.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    try {
+      products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" });
+      const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
+      orders.createOrder.mockReturnValue(order);
+      orders.getOrder.mockReturnValue(order);
+      products.reserveStock.mockReturnValue(true);
+      erp.call.mockResolvedValue({ success: true });
+      // Outside settleWithErp's own try/catch (which only wraps the ERP
+      // call itself) — this is what the .catch() around the detached
+      // settleWithErp() call in checkout() exists to protect against.
+      products.confirmReservation.mockImplementation(() => {
+        throw new Error("unexpected failure inside confirmReservation");
+      });
+
+      await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Erro inesperado em settleWithErp"), expect.any(String));
+    } finally {
+      errorSpy.mockRestore();
       jest.useRealTimers();
     }
   });

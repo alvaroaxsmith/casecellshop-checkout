@@ -19,6 +19,7 @@ describe("ErpService", () => {
 
   afterEach(() => {
     global.fetch = realFetch;
+    delete process.env.ERP_SIM_DELAY_MS;
   });
 
   describe("fetchCatalog", () => {
@@ -54,6 +55,17 @@ describe("ErpService", () => {
       global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }) as unknown as typeof fetch;
 
       await expect(service.call()).resolves.toEqual({ success: true });
+    });
+
+    it("forwards ERP_SIM_DELAY_MS as the X-Erp-Simulate-Delay-Ms header when set", async () => {
+      process.env.ERP_SIM_DELAY_MS = "250";
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      await service.call();
+
+      const [, init] = fetchMock.mock.calls[0];
+      expect((init.headers as Record<string, string>)["X-Erp-Simulate-Delay-Ms"]).toBe("250");
     });
   });
 });

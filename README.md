@@ -575,7 +575,7 @@ A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bru
 
 | Suíte | Statements | Testes |
 |---|---|---|
-| `backend` — unitários | 81.27% | 19 |
+| `backend` — unitários | 97.71% | 39 |
 | `backend` — e2e | 94.35% | 17 |
 | `erp-mock` | 96.96% | 9 |
 | `frontend` | 95.69% | 15 |
