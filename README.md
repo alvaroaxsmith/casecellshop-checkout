@@ -40,7 +40,7 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
 
 ## I. Checklist de requisitos do case
 
-Todo item do checklist de avaliação do case, com onde exatamente verificar cada um — nada aqui depende de confiar na palavra deste README sozinho.
+Todo item do checklist de avaliação do case, com onde exatamente verificar cada um.
 
 **Back-end**
 
