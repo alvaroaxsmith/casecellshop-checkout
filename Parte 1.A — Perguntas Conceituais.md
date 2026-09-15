@@ -1,6 +1,6 @@
 # CaseCellShop — Design Doc
 
-Respostas conceituais (Parte 1.A) do Desafio Técnico CaseCellShop — Nível Pleno | Fullstack.
+Respostas conceituais (Parte 1.A) do Desafio Técnico CaseCellShop.
 
 Autor: Alvaro Machado Ferreira
 Data: 2026-09-10
