@@ -59,7 +59,7 @@ Todo item do checklist de avaliação do case, com onde exatamente verificar cad
 | README explica como instalar e rodar | [Como rodar](#como-rodar) |
 | README explica decisões técnicas, limitações e próximos passos | [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas) (inclui "Limitações desta simulação") + [Próximos passos: Redis](#próximos-passos-redis-fase-1-e-redis-com-fila-fase-2) |
 | Escolha de stack explicada quando diferente da preferencial | [Por que NestJS, e não Express puro, no backend?](#por-que-nestjs-e-não-express-puro-no-backend) |
-| Testes automatizados ou estratégia clara de verificação | [Rodando os testes](#rodando-os-testes) + números reais de cobertura em [Evidências e testes automatizados](#evidências-e-testes-automatizados) |
+| Testes automatizados ou estratégia clara de verificação | [Rodando os testes](#rodando-os-testes) + cenários cobertos em [Evidências e testes automatizados](#evidências-e-testes-automatizados) |
 | Código organizado de forma compreensível | [Arquitetura do backend: Controller, Service, Module](#arquitetura-do-backend-controller-service-module) + organização do frontend na mesma seção do item de quantidade acima |
 | Bônus (diagrama, logs estruturados, endpoint de status, teste de concorrência) | Tabela completa em [Itens bônus entregues](#itens-bônus-entregues), logo abaixo |
 | `PROMPTS.md` registra os prompts relevantes | [`PROMPTS.md`](PROMPTS.md), linkado em [Leitura complementar](#leitura-complementar) |
@@ -571,14 +571,7 @@ A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bru
 | Idempotência | Mesma `Idempotency-Key` reenviada retorna o pedido original, sem duplicar reserva |
 | Falha do ERP | 3 tentativas esgotadas com backoff, pedido termina `failed` com `ERP_PROCESSING_FAILED` |
 
-[`evidencias/coverage-report.md`](evidencias/coverage-report.md) traz os números reais de cobertura (`--coverage` do Jest/Vitest, não estimados) de cada suíte, com o texto bruto de cada ferramenta:
-
-| Suíte | Statements | Testes |
-|---|---|---|
-| `backend` — unitários | 81.27% | 19 |
-| `backend` — e2e | 93.27% | 15 |
-| `erp-mock` | 96.15% | 7 |
-| `frontend` | 82.11% | 8 |
+> **Nota:** este README não publica um número de cobertura fixo — qualquer percentual impresso aqui ficaria desatualizado assim que um teste novo fosse adicionado (já aconteceu: a suíte do `erp-mock` cresceu depois que esse número foi medido pela última vez), e um percentual isolado, sem o contexto de qual linha específica ficou de fora e por quê, engana mais do que informa. Para o retrato real e atual, rode `npm run test:coverage` (`backend`/`erp-mock`/`frontend`, comandos na [seção anterior](#rodando-os-testes)) — a saída da própria ferramenta é sempre a fonte de verdade, nunca um resumo estático neste arquivo.
 
 ---
 
