@@ -6,6 +6,7 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
 
 ## Sumário
 
+- [Checklist de requisitos do case](#checklist-de-requisitos-do-case)
 - [Itens bônus entregues](#itens-bônus-entregues)
 - [Como rodar](#como-rodar)
   - [Pré-requisitos](#pré-requisitos)
@@ -20,6 +21,46 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
 - [Contrato da API (resumo)](#contrato-da-api-resumo)
 - [Evidências e testes automatizados](#evidências-e-testes-automatizados)
 - [Leitura complementar](#leitura-complementar)
+
+## Checklist de requisitos do case
+
+Todo item do checklist de avaliação do case, com onde exatamente verificar cada um — nada aqui depende de confiar na palavra deste README sozinho.
+
+**Back-end**
+
+| Requisito | Onde ver |
+|---|---|
+| API para listar/consultar produtos | `GET /products` — [Contrato da API](#contrato-da-api-resumo) |
+| API para criar uma tentativa de compra | `POST /checkout` — [Contrato da API](#contrato-da-api-resumo) |
+| Validação de entradas inválidas | `400 VALIDATION_ERROR` — [Contrato da API](#contrato-da-api-resumo); cenário manual `validation` em [Cenários de teste manual](#cenários-de-teste-manual) |
+| Diferencia sucesso, erro de validação, estoque insuficiente e falha técnica | Tabela dos 4 desfechos logo abaixo do contrato — [Contrato da API](#contrato-da-api-resumo) |
+| Nunca vende mais que o estoque disponível | [Armazenamento em memória](#armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo) (garantia de atomicidade) + teste de concorrência (linha "Teste de concorrência" da tabela de bônus abaixo) |
+| Estratégia contra pedido duplicado | `Idempotency-Key` — [Por que a idempotência só guarda em cache a resposta de sucesso?](#por-que-a-idempotência-só-guarda-em-cache-a-resposta-de-sucesso) |
+| Simulação clara de processamento lento/instável do ERP | Seção dedicada — [Demonstrando a simulação de lentidão/instabilidade do ERP](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) |
+
+**Front-end**
+
+| Requisito | Onde ver |
+|---|---|
+| Tela para listar produtos / selecionar um produto | Cards clicáveis com foto, preço e estoque — [Frontend: Tailwind e fotos reais dos produtos](#frontend-tailwind-e-fotos-reais-dos-produtos) |
+| Informar quantidade e iniciar a compra | `QuantityStepper` (`+`/`-` ou digitação direta) — [Frontend: Tailwind e fotos reais dos produtos](#frontend-tailwind-e-fotos-reais-dos-produtos) |
+| Loading visível e bloqueio de múltiplos cliques | Botão vira "Processando..." e desabilita assim que clicado — vídeo/GIF ["Duplo clique bloqueado"](#evidências-e-testes-automatizados) |
+| Mensagens compreensíveis para sucesso, estoque insuficiente, entrada inválida e falha temporária | Tabela de cenários gravados em [Evidências e testes automatizados](#evidências-e-testes-automatizados) — uma mensagem real por linha |
+| Estado da tela permanece coerente após erro ou retry | Explicado em [Frontend: Tailwind e fotos reais dos produtos](#frontend-tailwind-e-fotos-reais-dos-produtos); testado em `frontend/test/App.test.tsx` (`"shows a connection error and re-enables the buy button..."`) |
+
+**Qualidade e entrega**
+
+| Requisito | Onde ver |
+|---|---|
+| README explica como instalar e rodar | [Como rodar](#como-rodar) |
+| README explica decisões técnicas, limitações e próximos passos | [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas) (inclui "Limitações desta simulação") + [Próximos passos: Redis](#próximos-passos-redis-fase-1-e-redis-com-fila-fase-2) |
+| Escolha de stack explicada quando diferente da preferencial | [Por que NestJS, e não Express puro, no backend?](#por-que-nestjs-e-não-express-puro-no-backend) |
+| Testes automatizados ou estratégia clara de verificação | [Rodando os testes](#rodando-os-testes) + números reais de cobertura em [Evidências e testes automatizados](#evidências-e-testes-automatizados) |
+| Código organizado de forma compreensível | [Arquitetura do backend: Controller, Service, Module](#arquitetura-do-backend-controller-service-module) + organização do frontend na mesma seção do item de quantidade acima |
+| Bônus (diagrama, logs estruturados, endpoint de status, teste de concorrência) | Tabela completa em [Itens bônus entregues](#itens-bônus-entregues), logo abaixo |
+| `PROMPTS.md` registra os prompts relevantes | [`PROMPTS.md`](PROMPTS.md), linkado em [Leitura complementar](#leitura-complementar) |
+
+---
 
 ## Itens bônus entregues
 
@@ -352,7 +393,9 @@ Interface responsiva em Tailwind v4, produto selecionado por cards clicáveis (n
 <details>
 <summary>Por que isso importa (detalhes)?</summary>
 
-A tela de checkout é responsiva (testada de ~360px a desktop) e usa Tailwind CSS v4 (via `@tailwindcss/vite`, sem arquivo de config separado — os tokens de cor e tipografia vivem em `frontend/src/index.css`). O seletor de produto deixou de ser um `<select>` para virar um grupo de cards clicáveis (`role="radiogroup"`, um `<input type="radio">` acessível por trás de cada card), porque a foto do produto — vinda de `product.imageUrl`/`imageAlt`, ver "Catálogo" acima — só faz sentido como algo grande o bastante para ver a textura da capinha; um dropdown não comporta isso. O card também mostra preço e estoque disponível, recarregado do backend assim que uma compra reserva ou libera estoque, sem precisar dar reload na página.
+A tela de checkout é responsiva (testada de ~360px a desktop) e usa Tailwind CSS v4 (via `@tailwindcss/vite`, sem arquivo de config separado — os tokens de cor e tipografia vivem em `frontend/src/index.css`). O seletor de produto deixou de ser um `<select>` para virar um grupo de cards clicáveis (`role="radiogroup"`, um `<input type="radio">` acessível por trás de cada card), porque a foto do produto — vinda de `product.imageUrl`/`imageAlt`, ver "Catálogo" acima — só faz sentido como algo grande o bastante para ver a textura da capinha; um dropdown não comporta isso. O card também mostra preço e estoque disponível, recarregado do backend assim que uma compra reserva ou libera estoque, sem precisar dar reload na página. Ao lado do botão "Comprar", um `QuantityStepper` (`frontend/src/view/QuantityStepper.tsx`) deixa informar a quantidade com `+`/`-` ou digitando direto num `<input type="number" min={1}>` — desabilitado, junto com a seleção de produto, enquanto uma compra está em andamento.
+
+Depois de um erro (validação, estoque insuficiente, falha temporária do ERP ou de conexão), o estado da tela permanece coerente para uma nova tentativa: `useCheckout` sempre substitui o estado anterior por um novo (`idle` → `loading` → `success`/`error`), então o botão "Comprar" e os campos de seleção/quantidade voltam a ficar habilitados assim que o erro é exibido, sem exigir reload — coberto por um teste dedicado (`frontend/test/App.test.tsx`, `"shows a connection error and re-enables the buy button when the request fails outright"`).
 
 `frontend/src/` é organizado por responsabilidade, não por tipo de arquivo genérico:
 
@@ -422,6 +465,15 @@ O em-memória deste mini-projeto é uma escolha deliberada de escopo, não desco
 | `GET /orders/:id` | — | `200` — status atual do pedido (`pending` \| `confirmed` \| `failed`, com `error: { code, message }` quando `failed`) | `404 ORDER_NOT_FOUND` |
 
 O contrato exato, incluindo cada campo e código de status, está detalhado em [`specs/spec.md`](specs/spec.md) — e, de forma sempre sincronizada com o código (gerada a partir dos mesmos decorators dos controllers), em `http://localhost:3001/docs` com o backend rodando.
+
+`POST /checkout` e `GET /orders/:id` juntos diferenciam quatro desfechos possíveis, cada um com seu próprio formato de resposta — nunca um erro genérico "algo deu errado":
+
+| Desfecho | Onde aparece | Formato |
+|---|---|---|
+| **Sucesso** | `202` de `POST /checkout`, depois `status: "confirmed"` em `GET /orders/:id` | `{ orderId, status, statusUrl }` → `{ status: "confirmed" }` |
+| **Erro de validação** | `400 VALIDATION_ERROR` de `POST /checkout` | `{ error: { code: "VALIDATION_ERROR", message, field } }` |
+| **Estoque insuficiente** | `409 OUT_OF_STOCK` de `POST /checkout` | `{ error: { code: "OUT_OF_STOCK", message } }` |
+| **Falha técnica** (ERP lento/instável) | `202` inicial, depois `status: "failed"` em `GET /orders/:id` — nunca falha `POST /checkout` em si, porque a liquidação com o ERP é assíncrona (ver [seção dedicada](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp)) | `{ status: "failed", error: { code: "ERP_PROCESSING_FAILED", message } }` |
 
 ---
 
