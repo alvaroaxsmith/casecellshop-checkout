@@ -19,6 +19,10 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
   - [Fora de escopo](#fora-de-escopo)
 - [Próximos passos: Redis (Fase 1) e Redis com fila (Fase 2)](#próximos-passos-redis-fase-1-e-redis-com-fila-fase-2)
 - [Contrato da API (resumo)](#contrato-da-api-resumo)
+  - [`GET /products`](#get-products)
+  - [`POST /checkout`](#post-checkout)
+  - [`GET /orders/:id`](#get-ordersid)
+  - [Fallback: erro inesperado](#fallback-erro-inesperado)
 - [Evidências e testes automatizados](#evidências-e-testes-automatizados)
 - [Leitura complementar](#leitura-complementar)
 
@@ -464,9 +468,62 @@ O em-memória deste mini-projeto é uma escolha deliberada de escopo, não desco
 | `POST /checkout` | Corpo `{ productId, quantity, idempotencyKey }` (a chave também pode ir no header `Idempotency-Key`) | `202` `{ orderId, status: "pending", statusUrl }` | `400 VALIDATION_ERROR` · `404 PRODUCT_NOT_FOUND` · `409 OUT_OF_STOCK` |
 | `GET /orders/:id` | — | `200` — status atual do pedido (`pending` \| `confirmed` \| `failed`, com `error: { code, message }` quando `failed`) | `404 ORDER_NOT_FOUND` |
 
-O contrato exato, incluindo cada campo e código de status, está detalhado em [`specs/spec.md`](specs/spec.md) — e, de forma sempre sincronizada com o código (gerada a partir dos mesmos decorators dos controllers), em `http://localhost:3001/docs` com o backend rodando.
+A versão exaustiva e sempre sincronizada com o código (gerada a partir dos mesmos decorators dos controllers) está em `http://localhost:3001/docs` (Swagger UI) / `http://localhost:3001/docs-json` (schema OpenAPI) com o backend rodando, e a versão em prosa/markdown correspondente em [`specs/spec.md`, seção "API Contract"](specs/spec.md#api-contract). O detalhamento abaixo cobre o mesmo contrato, com exemplo de corpo para cada resposta possível.
 
-`POST /checkout` e `GET /orders/:id` juntos diferenciam quatro desfechos possíveis, cada um com seu próprio formato de resposta — nunca um erro genérico "algo deu errado":
+Todo corpo de erro segue o mesmo formato: `{ "error": { "code": string, "message": string, "field"?: string } }` — `field` só aparece em `VALIDATION_ERROR`.
+
+### `GET /products`
+
+Sem parâmetros. Sempre `200`:
+
+```json
+{
+  "products": [
+    { "id": "capinha-preta", "name": "Capinha Preta Fosca", "priceCents": 3990, "stock": 5, "imageUrl": "https://...", "imageAlt": "Capinha preta fosca em detalhe..." }
+  ]
+}
+```
+
+### `POST /checkout`
+
+Corpo da requisição:
+
+```json
+{ "productId": "capinha-preta", "quantity": 1, "idempotencyKey": "9b1e2c3a-..." }
+```
+
+`idempotencyKey` também pode ir no header `Idempotency-Key`, ficando de fora do corpo nesse caso — exatamente uma das duas formas é obrigatória (nenhuma das duas presente já é, em si, um `400 VALIDATION_ERROR`, `field: "idempotencyKey"`).
+
+| Status | Corpo | Quando |
+|---|---|---|
+| `202` | `{ "orderId": "ord_000001", "status": "pending", "statusUrl": "/orders/ord_000001" }` | Estoque reservado de forma síncrona; liquidação com o ERP continua em segundo plano (ver `GET /orders/:id`) |
+| `400 VALIDATION_ERROR` | `{ "error": { "code": "VALIDATION_ERROR", "message": "...", "field": "productId" \| "quantity" \| "idempotencyKey" } }` | `productId` ausente/vazio; `quantity` ausente, não-inteira ou não-positiva; nenhuma das duas fontes de `idempotencyKey` presente |
+| `404 PRODUCT_NOT_FOUND` | `{ "error": { "code": "PRODUCT_NOT_FOUND", "message": "Produto não encontrado." } }` | `productId` não corresponde a um produto existente |
+| `409 OUT_OF_STOCK` | `{ "error": { "code": "OUT_OF_STOCK", "message": "Este produto está esgotado no momento." } }` | Estoque disponível é menor que a `quantity` pedida |
+
+Uma requisição repetida com uma `idempotencyKey` já vista (de qualquer uma das duas fontes) responde exatamente o mesmo corpo `202` da chamada original, sem passar por nenhuma dessas checagens de novo — ver [Por que a idempotência só guarda em cache a resposta de sucesso?](#por-que-a-idempotência-só-guarda-em-cache-a-resposta-de-sucesso) para o porquê de só esse desfecho ser cacheado.
+
+### `GET /orders/:id`
+
+| Status | Corpo | Quando |
+|---|---|---|
+| `200` | `{ "orderId": "ord_000001", "status": "pending" \| "confirmed" }` | Pedido existe, ainda não falhou |
+| `200` | `{ "orderId": "ord_000001", "status": "failed", "error": { "code": "ERP_PROCESSING_FAILED", "message": "..." } }` | As 3 tentativas de liquidação com o ERP se esgotaram — ver [Demonstrando a simulação de lentidão/instabilidade do ERP](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) |
+| `404 ORDER_NOT_FOUND` | `{ "error": { "code": "ORDER_NOT_FOUND", "message": "Pedido não encontrado." } }` | `id` não corresponde a um pedido existente |
+
+Repare que `failed` é sempre um `200`, nunca um status HTTP de erro à parte — a *requisição* para consultar o status teve sucesso; é o *pedido* que tem um desfecho terminal negativo, carregado no corpo, no mesmo formato de envelope usado para os erros HTTP dos outros endpoints.
+
+### Fallback: erro inesperado
+
+Qualquer exceção que não seja uma das exceções de domínio tipadas acima (um bug de verdade, não uma recusa de regra de negócio) ainda é capturada pelo `HttpExceptionFilter` global e vira uma resposta bem formada em vez de derrubar o processo ou vazar um stack trace:
+
+```json
+{ "error": { "code": "INTERNAL_ERROR", "message": "Ocorreu um erro inesperado. Tente novamente." } }
+```
+
+com status HTTP `500`. Esse caminho não é esperado nos cenários normais do case — existe como rede de segurança de último recurso, e tem teste dedicado (`HttpExceptionFilter`'s spec, `backend/src/common/filters/http-exception.filter.spec.ts`).
+
+`POST /checkout` e `GET /orders/:id` juntos diferenciam quatro desfechos de negócio possíveis, cada um com seu próprio formato de resposta — nunca um erro genérico "algo deu errado":
 
 | Desfecho | Onde aparece | Formato |
 |---|---|---|

@@ -59,7 +59,8 @@ A single-item fullstack checkout flow: the customer sees a product list, picks a
 - **`GET /products`**: lists the products and their available stock (actual stock minus active reservations).
 - **`POST /checkout`**: contract exactly as defined in Question 4 of Part 1.A — payload (`productId`, `quantity`, `idempotencyKey`), success `202` with `status: pending`, validation error `400`, product not found `404`, insufficient stock `409`.
 - **Stock reservation**: balance check and unit deduction as a single synchronous operation, with a 2-minute expiration (ADR-002) checked by timestamp (no native Redis TTL, since it's an in-memory `Map`).
-- **ERP simulator**: a separate, standalone HTTP service (`erp-mock/`) — not an in-process fake — that, when called, waits a delay (configurable) and responds with success or failure, simulating slowness/instability of a real external system the backend has no control over. Its behavior is driven entirely by per-request headers (never server-side state), so it must have a deterministic mode switchable per call, so tests can force success, failure, or timeout without depending on randomness and without one test's configuration leaking into a concurrent one.
+- **ERP simulator**: a separate, standalone HTTP service (`erp-mock/`) — not an in-process fake — that, when called, waits a delay (configurable) and responds with success, failure, an HTTP error status, or a dropped connection, simulating slowness/instability of a real external system the backend has no control over. Its behavior is driven entirely by per-request headers (never server-side state), so it must have a deterministic mode switchable per call, so tests can force a specific outcome without depending on randomness and without one test's configuration leaking into a concurrent one. Six modes exist: `random` (default — mixed delay and outcome), `always-success`, `always-fail` (fast, `success: false` on a `200`), `always-timeout` (always slower than the backend's per-attempt timeout), `always-http-error` (a real non-2xx status, `503`), and `always-reset` (drops the connection with no response at all, so the caller's request rejects instead of resolving). The last two exist specifically so `ErpService`'s error-handling code (`if (!res.ok)`, and the `try/catch` around a rejected call) is exercised against the real running mock, not only against a mocked `fetch` in a unit test.
+- **API documentation**: generated from the same `class-validator`/`@nestjs/swagger` decorators that drive request validation — never hand-written separately, so it cannot drift from the actual request/response shapes. Served at `/docs` (Swagger UI) and `/docs-json` (raw OpenAPI schema) when the backend is running. This is the authoritative, exhaustive version of the [API Contract](#api-contract) below.
 - **Checkout flow**: `POST /checkout` always responds `202 pending` immediately as soon as the stock reservation succeeds — it never waits for the ERP to respond before returning the HTTP response, even if the simulated ERP responds within a few milliseconds. The attempt against the simulated ERP (3s timeout per attempt, ADR-004) happens entirely in the background, with up to 3 attempts and backoff — the same logic as ADR-004, without a real queue. This uniformity is deliberate: the `POST /checkout` contract never varies with ERP speed, and the `confirmed`/`failed` states only ever appear via `GET /orders/:id`, never inline in the `POST /checkout` response.
 - **`GET /orders/:id`**: returns the order's current status (`pending`, `confirmed`, `failed`), with the `ERP_PROCESSING_FAILED` error body when applicable — this is an explicit bonus item in the case's checklist. An `id` that doesn't exist returns `404` with `errorCode: ORDER_NOT_FOUND`.
 - **Idempotency**: `idempotencyKey` is required — sent either in the payload or in the `Idempotency-Key` header (faithful to Question 4 of Part 1.A's original contract, which allows both forms). A request with neither is a `VALIDATION_ERROR` (400, field `idempotencyKey`). Only the **success** response (`202`) is cached against the key, mapping to the order it created; a repeated key returns that same order info without creating a second reservation (ADR-003, without the 24h TTL since there's no real persistence to protect in a short-lived process). Validation, not-found, and out-of-stock responses are **not** cached — they're pure functions of the current input/state, so recomputing them on retry naturally gives the same answer without needing a cache; the only case that actually needs caching is the one with a side effect (creating an order and reserving stock) that a retry must not repeat.
@@ -69,18 +70,75 @@ A single-item fullstack checkout flow: the customer sees a product list, picks a
 
 The entities involved in this flow, and the fields that matter to the case:
 
-- **Product**: `id`, `name`, `priceCents`, `stock` (base quantity owned) — `GET /products` reports `stock` as *available* stock (base minus active reservations), never the raw base quantity, so a customer never sees a number they could still overbuy against.
+- **Product**: `id`, `name`, `priceCents`, `stock` (base quantity owned), `imageUrl`, `imageAlt` — owned by the ERP (`erp-mock`'s `GET /erp/products`), not invented by the store; `GET /products` reports `stock` as *available* stock (base minus active reservations), never the raw base quantity, so a customer never sees a number they could still overbuy against.
 - **Order**: `id`, `productId`, `quantity`, `status` (`pending` | `confirmed` | `failed`), `errorCode?`, `errorMessage?`, `createdAt` — `confirmed` and `failed` are the only terminal statuses, and once either is set it never changes again.
 - **Stock reservation** (internal bookkeeping, never exposed through an endpoint): `orderId`, `productId`, `quantity`, `status` (`active` | `confirmed` | `released`), `expiresAt` — this exists only to make "how much is actually available right now" answerable while an order is still `pending`; it isn't part of the product or order the customer ever sees directly.
 
 This shape is intentionally independent of storage technology — the fields are dictated by what the business needs to know (see `Implementation Decisions` → `Storage` for why in-memory is sufficient here), not by whether it's a `Map` today or a real database later.
 
+## API Contract
+
+The authoritative, always-in-sync version of this contract is the generated OpenAPI schema (`/docs-json` with the backend running, human-readable at `/docs`) — this section exists so the contract is readable without running anything. Every response body below is the literal JSON shape returned; every error follows the same envelope: `{ "error": { "code": string, "message": string, "field"?: string } }` (`field` present only for `VALIDATION_ERROR`).
+
+### `GET /products`
+
+No parameters, no auth. Always `200`.
+
+```json
+{
+  "products": [
+    { "id": "capinha-preta", "name": "Capinha Preta Fosca", "priceCents": 3990, "stock": 5, "imageUrl": "https://...", "imageAlt": "Capinha preta fosca em detalhe..." }
+  ]
+}
+```
+
+`stock` is *available* stock (base minus active reservations) — see Data Model above.
+
+### `POST /checkout`
+
+Request body:
+
+```json
+{ "productId": "capinha-preta", "quantity": 1, "idempotencyKey": "9b1e2c3a-..." }
+```
+
+`idempotencyKey` may instead be sent as the `Idempotency-Key` request header, omitted from the body in that case — exactly one of the two is required (neither present is itself a `VALIDATION_ERROR`, field `idempotencyKey`).
+
+| Status | Body | When |
+|---|---|---|
+| `202` | `{ "orderId": "ord_000001", "status": "pending", "statusUrl": "/orders/ord_000001" }` | Stock reserved synchronously; ERP settlement continues in the background (see `GET /orders/:id`) |
+| `400 VALIDATION_ERROR` | `{ "error": { "code": "VALIDATION_ERROR", "message": "...", "field": "productId" \| "quantity" \| "idempotencyKey" } }` | `productId` missing/empty; `quantity` missing, non-integer, or not positive; both `idempotencyKey` sources missing |
+| `404 PRODUCT_NOT_FOUND` | `{ "error": { "code": "PRODUCT_NOT_FOUND", "message": "Produto não encontrado." } }` | `productId` doesn't match a known product |
+| `409 OUT_OF_STOCK` | `{ "error": { "code": "OUT_OF_STOCK", "message": "Este produto está esgotado no momento." } }` | Available stock is less than the requested `quantity` |
+
+A repeated request with an already-seen `idempotencyKey` (from either source) short-circuits before any of the above logic runs and returns the exact same `202` body as the original call — see `Implementation Decisions` → `Idempotency` for why only that one outcome is cached.
+
+### `GET /orders/:id`
+
+| Status | Body | When |
+|---|---|---|
+| `200` | `{ "orderId": "ord_000001", "status": "pending" \| "confirmed" }` | Order exists, not (yet) failed |
+| `200` | `{ "orderId": "ord_000001", "status": "failed", "error": { "code": "ERP_PROCESSING_FAILED", "message": "..." } }` | All 3 ERP settlement attempts were exhausted — see the [ERP slowness/instability section](../README.md#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) of the README |
+| `404 ORDER_NOT_FOUND` | `{ "error": { "code": "ORDER_NOT_FOUND", "message": "Pedido não encontrado." } }` | `id` doesn't match a known order |
+
+Note `failed` is always a `200`, never a distinct HTTP error status — the *request* to check status succeeded; it's the *order* that has a terminal negative outcome, carried in the body, matching the same envelope shape used for HTTP-level errors elsewhere.
+
+### Fallback: unexpected errors
+
+Any exception that isn't one of the typed domain exceptions above (a real bug, not a business-rule rejection) is still caught by the global `HttpExceptionFilter` and turned into a well-formed response rather than crashing the process or leaking a stack trace:
+
+```json
+{ "error": { "code": "INTERNAL_ERROR", "message": "Ocorreu um erro inesperado. Tente novamente." } }
+```
+
+with HTTP status `500`. This path is not expected to be exercised by the case's normal scenarios; it exists as a last-resort safety net, and has its own dedicated test (`HttpExceptionFilter`'s spec).
+
 ## Testing Decisions
 
 - A good test here checks externally observable behavior, never internal implementation (it must not inspect a service's internal `Map` directly, for example).
-- **Backend, end-to-end** (seam: the API's HTTP boundary, Jest + supertest, `*.e2e-spec.ts`): success, validation error (including a missing `idempotencyKey`), product not found, insufficient stock, concurrency (N simultaneous requests for a product with 1 unit — only one succeeds), resending the same `idempotencyKey` (via payload and via the `Idempotency-Key` header), simulated ERP failure via both the fast path (`always-fail`) and the timeout path (`always-timeout`, which exercises `Promise.race` losing to the clock, not just the ERP responding negatively) — using the simulator's deterministic mode. This is the primary seam and covers every scenario in the case's checklist.
+- **Backend, end-to-end** (seam: the API's HTTP boundary, Jest + supertest, `*.e2e-spec.ts`): success, validation error (including a missing `idempotencyKey`), product not found, insufficient stock, concurrency (N simultaneous requests for a product with 1 unit — only one succeeds), resending the same `idempotencyKey` (via payload and via the `Idempotency-Key` header), and four distinct simulated ERP failure shapes against the real running mock — the fast negative path (`always-fail`), the timeout path (`always-timeout`, which exercises `Promise.race` losing to the clock, not just the ERP responding negatively), a real non-2xx HTTP status (`always-http-error`, exercising `ErpService.call`'s `if (!res.ok)` branch against the real mock instead of a mocked `fetch`), and a dropped connection (`always-reset`, exercising the `try/catch` around a genuinely rejected call). This is the primary seam and covers every scenario in the case's checklist.
 - **Backend, unit** (Jest, `*.spec.ts`, mocked/faked collaborators — required by the project [constitution](constitution.md) on top of the e2e seam above): the two services that hold actual business rules — `ProductsService` (reservation only succeeds while there's enough available; release restores availability without touching base stock; confirmation permanently deducts it) and `CheckoutService` (each error branch throws the right domain exception; a cached idempotency key short-circuits before creating a new order). `OrdersService`, `IdempotencyService`, and `ErpService` are plain data holders/adapters with no branching logic of their own — they're exercised through the e2e tests and don't get redundant isolated unit tests of their own.
-- **ERP mock, its own tests** (seam: the mock's own HTTP boundary, Jest + supertest, run against the Express `app` directly — no live port needed): one test per simulate mode (`always-success`, `always-fail`, `always-timeout`), one proving the requested delay is actually honored, and one proving the header-less default (`random`) still returns a well-formed response. This is what lets the backend's e2e suite trust the mock without re-testing its internals.
+- **ERP mock, its own tests** (seam: the mock's own HTTP boundary, Jest + supertest, run against the Express `app` directly — no live port needed): one test per simulate mode (`always-success`, `always-fail`, `always-timeout`, `always-http-error`, `always-reset`), one proving the requested delay is actually honored, and one proving the header-less default (`random`) still returns a well-formed response. This is what lets the backend's e2e suite trust the mock without re-testing its internals.
 - **Front-end** (seam: React component, Vitest + React Testing Library): loading, button disabled while processing, and the correct message rendered for each possible API response (mocking only the HTTP call, not the UI logic).
 - The e2e/component seams were already committed to in Question 5 of Part 1.A; the unit-test layer for backend services is an addition required by the constitution once the stack moved to NestJS, and doesn't replace or duplicate the e2e coverage.
 
