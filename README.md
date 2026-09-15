@@ -6,27 +6,39 @@ O repositório contém três processos Node.js independentes — `erp-mock/`, `b
 
 ## Sumário
 
-- [Checklist de requisitos do case](#checklist-de-requisitos-do-case)
-- [Itens bônus entregues](#itens-bônus-entregues)
-- [Como rodar](#como-rodar)
-  - [Pré-requisitos](#pré-requisitos)
-  - [Em um único comando](#em-um-único-comando)
-  - [Passo a passo manual](#passo-a-passo-manual)
-- [Rodando os testes](#rodando-os-testes)
-- [Cenários de teste manual](#cenários-de-teste-manual)
-- [Demonstrando a simulação de lentidão/instabilidade do ERP](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp)
-- [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas)
-  - [Fora de escopo](#fora-de-escopo)
-- [Próximos passos: Redis (Fase 1) e Redis com fila (Fase 2)](#próximos-passos-redis-fase-1-e-redis-com-fila-fase-2)
-- [Contrato da API (resumo)](#contrato-da-api-resumo)
-  - [`GET /products`](#get-products)
-  - [`POST /checkout`](#post-checkout)
-  - [`GET /orders/:id`](#get-ordersid)
-  - [Fallback: erro inesperado](#fallback-erro-inesperado)
-- [Evidências e testes automatizados](#evidências-e-testes-automatizados)
-- [Leitura complementar](#leitura-complementar)
+- [I. Checklist de requisitos do case](#i-checklist-de-requisitos-do-case)
+- [II. Itens bônus entregues](#ii-itens-bônus-entregues)
+- [III. Como rodar](#iii-como-rodar)
+  - [III.a Pré-requisitos](#iiia-pré-requisitos)
+  - [III.b Em um único comando](#iiib-em-um-único-comando)
+  - [III.c Passo a passo manual](#iiic-passo-a-passo-manual)
+- [IV. Rodando os testes](#iv-rodando-os-testes)
+  - [IV.a `erp-mock/`](#iva-erp-mock)
+  - [IV.b `backend/`](#ivb-backend)
+  - [IV.c `frontend/`](#ivc-frontend)
+  - [IV.d `e2e/` (Playwright)](#ivd-e2e-playwright)
+- [V. Cenários de teste manual](#v-cenários-de-teste-manual)
+- [VI. Demonstrando a simulação de lentidão/instabilidade do ERP](#vi-demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp)
+- [VII. Arquitetura e principais decisões técnicas](#vii-arquitetura-e-principais-decisões-técnicas)
+  - [VII.a Por que `erp-mock` é um serviço HTTP real separado?](#viia-por-que-erp-mock-é-um-serviço-http-real-separado-e-não-uma-simulação-in-process)
+  - [VII.b Catálogo: o ERP é o dono dos dados, a loja só lê](#viib-catálogo-o-erp-é-o-dono-dos-dados-a-loja-só-lê)
+  - [VII.c Por que NestJS, e não Express puro, no backend?](#viic-por-que-nestjs-e-não-express-puro-no-backend)
+  - [VII.d Arquitetura do backend: Controller, Service, Module](#viid-arquitetura-do-backend-controller-service-module)
+  - [VII.e Armazenamento em memória, sem banco de dados ou cache externo](#viie-armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo)
+  - [VII.f Frontend: Tailwind e fotos reais dos produtos](#viif-frontend-tailwind-e-fotos-reais-dos-produtos)
+  - [VII.g Por que a idempotência só guarda em cache a resposta de sucesso?](#viig-por-que-a-idempotência-só-guarda-em-cache-a-resposta-de-sucesso)
+  - [VII.h Rastreabilidade: logs estruturados em todo o fluxo](#viih-rastreabilidade-logs-estruturados-em-todo-o-fluxo)
+  - [VII.i Fora de escopo](#viii-fora-de-escopo)
+- [VIII. Próximos passos: Redis (Fase 1) e Redis com fila (Fase 2)](#viii-próximos-passos-redis-fase-1-e-redis-com-fila-fase-2)
+- [IX. Contrato da API (resumo)](#ix-contrato-da-api-resumo)
+  - [IX.a `GET /products`](#ixa-get-products)
+  - [IX.b `POST /checkout`](#ixb-post-checkout)
+  - [IX.c `GET /orders/:id`](#ixc-get-ordersid)
+  - [IX.d Fallback: erro inesperado](#ixd-fallback-erro-inesperado)
+- [X. Evidências e testes automatizados](#x-evidências-e-testes-automatizados)
+- [XI. Leitura complementar](#xi-leitura-complementar)
 
-## Checklist de requisitos do case
+## I. Checklist de requisitos do case
 
 Todo item do checklist de avaliação do case, com onde exatamente verificar cada um — nada aqui depende de confiar na palavra deste README sozinho.
 
@@ -34,58 +46,58 @@ Todo item do checklist de avaliação do case, com onde exatamente verificar cad
 
 | Requisito | Onde ver |
 |---|---|
-| API para listar/consultar produtos | `GET /products` — [Contrato da API](#contrato-da-api-resumo) |
-| API para criar uma tentativa de compra | `POST /checkout` — [Contrato da API](#contrato-da-api-resumo) |
-| Validação de entradas inválidas | `400 VALIDATION_ERROR` — [Contrato da API](#contrato-da-api-resumo); cenário manual `validation` em [Cenários de teste manual](#cenários-de-teste-manual) |
-| Diferencia sucesso, erro de validação, estoque insuficiente e falha técnica | Tabela dos 4 desfechos logo abaixo do contrato — [Contrato da API](#contrato-da-api-resumo) |
-| Nunca vende mais que o estoque disponível | [Armazenamento em memória](#armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo) (garantia de atomicidade) + teste de concorrência (linha "Teste de concorrência" da tabela de bônus abaixo) |
-| Estratégia contra pedido duplicado | `Idempotency-Key` — [Por que a idempotência só guarda em cache a resposta de sucesso?](#por-que-a-idempotência-só-guarda-em-cache-a-resposta-de-sucesso) |
-| Simulação clara de processamento lento/instável do ERP | Seção dedicada — [Demonstrando a simulação de lentidão/instabilidade do ERP](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) |
+| API para listar/consultar produtos | `GET /products` — [Contrato da API](#ix-contrato-da-api-resumo) |
+| API para criar uma tentativa de compra | `POST /checkout` — [Contrato da API](#ix-contrato-da-api-resumo) |
+| Validação de entradas inválidas | `400 VALIDATION_ERROR` — [Contrato da API](#ix-contrato-da-api-resumo); cenário manual `validation` em [Cenários de teste manual](#v-cenários-de-teste-manual) |
+| Diferencia sucesso, erro de validação, estoque insuficiente e falha técnica | Tabela dos 4 desfechos logo abaixo do contrato — [Contrato da API](#ix-contrato-da-api-resumo) |
+| Nunca vende mais que o estoque disponível | [Armazenamento em memória](#viie-armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo) (garantia de atomicidade) + teste de concorrência (linha "Teste de concorrência" da tabela de bônus abaixo) |
+| Estratégia contra pedido duplicado | `Idempotency-Key` — [Por que a idempotência só guarda em cache a resposta de sucesso?](#viig-por-que-a-idempotência-só-guarda-em-cache-a-resposta-de-sucesso) |
+| Simulação clara de processamento lento/instável do ERP | Seção dedicada — [Demonstrando a simulação de lentidão/instabilidade do ERP](#vi-demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) |
 
 **Front-end**
 
 | Requisito | Onde ver |
 |---|---|
-| Tela para listar produtos / selecionar um produto | Cards clicáveis com foto, preço e estoque — [Frontend: Tailwind e fotos reais dos produtos](#frontend-tailwind-e-fotos-reais-dos-produtos) |
-| Informar quantidade e iniciar a compra | `QuantityStepper` (`+`/`-` ou digitação direta) — [Frontend: Tailwind e fotos reais dos produtos](#frontend-tailwind-e-fotos-reais-dos-produtos) |
-| Loading visível e bloqueio de múltiplos cliques | Botão vira "Processando..." e desabilita assim que clicado — vídeo/GIF ["Duplo clique bloqueado"](#evidências-e-testes-automatizados) |
-| Mensagens compreensíveis para sucesso, estoque insuficiente, entrada inválida e falha temporária | Tabela de cenários gravados em [Evidências e testes automatizados](#evidências-e-testes-automatizados) — uma mensagem real por linha |
-| Estado da tela permanece coerente após erro ou retry | Explicado em [Frontend: Tailwind e fotos reais dos produtos](#frontend-tailwind-e-fotos-reais-dos-produtos); testado em `frontend/test/App.test.tsx` (`"shows a connection error and re-enables the buy button..."`) |
+| Tela para listar produtos / selecionar um produto | Cards clicáveis com foto, preço e estoque — [Frontend: Tailwind e fotos reais dos produtos](#viif-frontend-tailwind-e-fotos-reais-dos-produtos) |
+| Informar quantidade e iniciar a compra | `QuantityStepper` (`+`/`-` ou digitação direta) — [Frontend: Tailwind e fotos reais dos produtos](#viif-frontend-tailwind-e-fotos-reais-dos-produtos) |
+| Loading visível e bloqueio de múltiplos cliques | Botão vira "Processando..." e desabilita assim que clicado — vídeo/GIF ["Duplo clique bloqueado"](#x-evidências-e-testes-automatizados) |
+| Mensagens compreensíveis para sucesso, estoque insuficiente, entrada inválida e falha temporária | Tabela de cenários gravados em [Evidências e testes automatizados](#x-evidências-e-testes-automatizados) — uma mensagem real por linha |
+| Estado da tela permanece coerente após erro ou retry | Explicado em [Frontend: Tailwind e fotos reais dos produtos](#viif-frontend-tailwind-e-fotos-reais-dos-produtos); testado em `frontend/test/App.test.tsx` (`"shows a connection error and re-enables the buy button..."`) |
 
 **Qualidade e entrega**
 
 | Requisito | Onde ver |
 |---|---|
-| README explica como instalar e rodar | [Como rodar](#como-rodar) |
-| README explica decisões técnicas, limitações e próximos passos | [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas) (inclui "Limitações desta simulação") + [Próximos passos: Redis](#próximos-passos-redis-fase-1-e-redis-com-fila-fase-2) |
-| Escolha de stack explicada quando diferente da preferencial | [Por que NestJS, e não Express puro, no backend?](#por-que-nestjs-e-não-express-puro-no-backend) |
-| Testes automatizados ou estratégia clara de verificação | [Rodando os testes](#rodando-os-testes) + números reais de cobertura em [Evidências e testes automatizados](#evidências-e-testes-automatizados) |
-| Código organizado de forma compreensível | [Arquitetura do backend: Controller, Service, Module](#arquitetura-do-backend-controller-service-module) + organização do frontend na mesma seção do item de quantidade acima |
-| Bônus (diagrama, logs estruturados, endpoint de status, teste de concorrência) | Tabela completa em [Itens bônus entregues](#itens-bônus-entregues), logo abaixo |
-| `PROMPTS.md` registra os prompts relevantes | [`PROMPTS.md`](PROMPTS.md), linkado em [Leitura complementar](#leitura-complementar) |
+| README explica como instalar e rodar | [Como rodar](#iii-como-rodar) |
+| README explica decisões técnicas, limitações e próximos passos | [Arquitetura e principais decisões técnicas](#vii-arquitetura-e-principais-decisões-técnicas) (inclui "Limitações desta simulação") + [Próximos passos: Redis](#viii-próximos-passos-redis-fase-1-e-redis-com-fila-fase-2) |
+| Escolha de stack explicada quando diferente da preferencial | [Por que NestJS, e não Express puro, no backend?](#viic-por-que-nestjs-e-não-express-puro-no-backend) |
+| Testes automatizados ou estratégia clara de verificação | [Rodando os testes](#iv-rodando-os-testes) + números reais de cobertura em [Evidências e testes automatizados](#x-evidências-e-testes-automatizados) |
+| Código organizado de forma compreensível | [Arquitetura do backend: Controller, Service, Module](#viid-arquitetura-do-backend-controller-service-module) + organização do frontend na mesma seção do item de quantidade acima |
+| Bônus (diagrama, logs estruturados, endpoint de status, teste de concorrência) | Tabela completa em [Itens bônus entregues](#ii-itens-bônus-entregues), logo abaixo |
+| `PROMPTS.md` registra os prompts relevantes | [`PROMPTS.md`](PROMPTS.md), linkado em [Leitura complementar](#xi-leitura-complementar) |
 
 ---
 
-## Itens bônus entregues
+## II. Itens bônus entregues
 
 | Item bônus | Onde ver | Resultado |
 |---|---|---|
-| Diagrama de arquitetura | [Arquitetura e principais decisões técnicas](#arquitetura-e-principais-decisões-técnicas) | Fluxo completo usuário → frontend → backend → `erp-mock`, com a fronteira em memória explícita |
-| Logs estruturados | [Rastreabilidade](#rastreabilidade-logs-estruturados-em-todo-o-fluxo) · [`evidencias/logs-backend.md`](evidencias/logs-backend.md) | Captura real cobrindo caminho feliz, os 4 tipos de erro, concorrência pela última unidade, idempotência e esgotamento de retry com o ERP |
+| Diagrama de arquitetura | [Arquitetura e principais decisões técnicas](#vii-arquitetura-e-principais-decisões-técnicas) | Fluxo completo usuário → frontend → backend → `erp-mock`, com a fronteira em memória explícita |
+| Logs estruturados | [Rastreabilidade](#viih-rastreabilidade-logs-estruturados-em-todo-o-fluxo) · [`evidencias/logs-backend.md`](evidencias/logs-backend.md) | Captura real cobrindo caminho feliz, os 4 tipos de erro, concorrência pela última unidade, idempotência e esgotamento de retry com o ERP |
 | Endpoint de status do pedido | `GET /orders/:id` | Retorna `pending` / `confirmed` / `failed` (com `error.code`/`error.message` quando falha) |
-| Teste de concorrência | [Armazenamento em memória](#armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo) | Várias requisições simultâneas pela última unidade de estoque — exatamente uma reserva passa, as demais recusadas com `409` |
+| Teste de concorrência | [Armazenamento em memória](#viie-armazenamento-em-memória-sem-banco-de-dados-ou-cache-externo) | Várias requisições simultâneas pela última unidade de estoque — exatamente uma reserva passa, as demais recusadas com `409` |
 | Documentação interativa da API (Swagger/OpenAPI) | `http://localhost:3001/docs` (schema em `/docs-json`, com o backend rodando) | Gerada a partir dos mesmos decorators dos controllers — sempre sincronizada com o código, nunca desatualizada |
 
 ---
 
-## Como rodar
+## III. Como rodar
 
-### Pré-requisitos
+### III.a Pré-requisitos
 
 - Node.js 20 LTS
 - npm
 
-### Em um único comando
+### III.b Em um único comando
 
 ```bash
 npm run install:all   # instala erp-mock, backend e frontend de uma vez
@@ -94,7 +106,7 @@ npm run dev            # sobe os três juntos, com saída colorida e prefixada
 
 > **Dica:** Os dois comandos rodam na raiz do repositório (`package.json` novo, com [`concurrently`](https://www.npmjs.com/package/concurrently) orquestrando os três processos). `Ctrl+C` derruba os três de uma vez. É equivalente ao passo a passo manual abaixo — use aquele se quiser rodar/reiniciar um serviço isoladamente, ou este para o dia a dia.
 
-### Passo a passo manual
+### III.c Passo a passo manual
 
 > **Importante:** cada pacote é instalado e iniciado de forma independente, em seu próprio terminal, **nesta ordem**: o backend busca o catálogo de produtos no `erp-mock` assim que sobe (e falha ao iniciar se não conseguir), então `erp-mock` precisa estar de pé primeiro; o frontend precisa do backend para qualquer dado real.
 
@@ -139,7 +151,7 @@ A API do backend tem documentação interativa (Swagger/OpenAPI) em `http://loca
 
 ---
 
-## Rodando os testes
+## IV. Rodando os testes
 
 | Pacote | Framework | Comando principal |
 |---|---|---|
@@ -150,7 +162,7 @@ A API do backend tem documentação interativa (Swagger/OpenAPI) em `http://loca
 | `e2e/` — Playwright | Playwright | `npm test` |
 | `e2e/` — Playwright, ERP lento (isolada) | Playwright | `npm run test:erp-lento` |
 
-### `erp-mock/`
+### IV.a `erp-mock/`
 
 Executado diretamente contra o `app` do Express, sem precisar vincular porta:
 
@@ -159,7 +171,7 @@ cd erp-mock
 npm test               # ou npm run test:coverage para o relatório de cobertura
 ```
 
-### `backend/`
+### IV.b `backend/`
 
 ```bash
 cd backend
@@ -171,7 +183,7 @@ npm run test:e2e:coverage   # cobertura da suíte e2e
 
 > **Nota:** `npm run test:e2e` sobe o `erp-mock` automaticamente como um processo filho antes da suíte rodar e o encerra depois (`test/global-setup.ts` / `test/global-teardown.ts`, que fazem polling em `GET /health` antes de liberar os testes) — você **não** precisa ter o `erp-mock` já rodando em outro terminal especificamente para esse comando. Ele ainda é necessário como processo separado para o `start:dev`/uso manual do próprio backend, e para o fluxo do frontend acima.
 
-### `frontend/`
+### IV.c `frontend/`
 
 React Testing Library + Vitest:
 
@@ -180,7 +192,7 @@ cd frontend
 npm test               # ou npm run test:coverage para o relatório de cobertura
 ```
 
-### `e2e/` (Playwright)
+### IV.d `e2e/` (Playwright)
 
 Sobe `erp-mock`, `backend` e `frontend` como processos reais (via `webServer` do `playwright.config.ts`) e dirige um navegador Chromium contra a UI — diferente das suítes acima, não testa uma unidade nem um contrato HTTP isolado:
 
@@ -193,13 +205,13 @@ npm test
 
 Cobre o caminho feliz, bloqueio por falta de estoque, duplo clique, validação de entrada e uma falha simulada do ERP com recuperação.
 
-> **Atenção:** precisa que as portas 4000/3001/5173 estejam livres antes de rodar — encerre qualquer instância manual dos três serviços da seção ["Como rodar"](#como-rodar) primeiro.
+> **Atenção:** precisa que as portas 4000/3001/5173 estejam livres antes de rodar — encerre qualquer instância manual dos três serviços da seção ["Como rodar"](#iii-como-rodar) primeiro.
 
 Cada execução grava vídeo, screenshot e trace de cada teste em `e2e/test-results/` (git-ignorado); veja [`evidencias/`](evidencias/) na raiz do repositório para uma amostra já gravada.
 
-#### Suíte isolada: ERP lento de verdade
+#### IV.d.1 Suíte isolada: ERP lento de verdade
 
-Uma segunda config do Playwright, dedicada a exercitar o modo `always-timeout` do ERP de verdade — não simulado no navegador. Detalhes de como e por quê na [seção sobre a simulação de lentidão/instabilidade do ERP](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) logo abaixo:
+Uma segunda config do Playwright, dedicada a exercitar o modo `always-timeout` do ERP de verdade — não simulado no navegador. Detalhes de como e por quê na [seção sobre a simulação de lentidão/instabilidade do ERP](#vi-demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) logo abaixo:
 
 ```bash
 npm run test:erp-lento   # dentro de e2e/ — sobe um segundo trio de serviços, em portas próprias
@@ -208,7 +220,7 @@ npm run test:all         # roda as duas suítes Playwright em sequência
 
 ---
 
-## Cenários de teste manual
+## V. Cenários de teste manual
 
 Com os três serviços de pé (`npm run dev`, numa aba separada), `scripts/scenarios.sh` dispara cenários reais contra a API via `curl`, com saída legível — útil pra explorar o comportamento na mão sem escrever `curl` a cada vez:
 
@@ -234,11 +246,11 @@ scripts/scenarios.sh all   # roda todos os cenários abaixo (exceto erp-slow/erp
 | `erp-reset` | Checkout contra um backend iniciado com `ERP_SIM_MODE=always-reset` — o `erp-mock` derruba a conexão de verdade (`req.socket.destroy()`), sem responder nada |
 | `status <orderId>` | Consulta um pedido específico |
 
-> **Nota:** o cenário `erp-failure` só é determinístico se o backend tiver sido iniciado com `ERP_SIM_MODE=always-fail npm run dev` (ver ["Como rodar"](#como-rodar) acima) — com o modo `random` padrão, o script avisa isso na tela e reporta o que aconteceu de verdade. O script não sobe nem derruba nenhum processo — só assume que `npm run dev` já está rodando em outra aba.
+> **Nota:** o cenário `erp-failure` só é determinístico se o backend tiver sido iniciado com `ERP_SIM_MODE=always-fail npm run dev` (ver ["Como rodar"](#iii-como-rodar) acima) — com o modo `random` padrão, o script avisa isso na tela e reporta o que aconteceu de verdade. O script não sobe nem derruba nenhum processo — só assume que `npm run dev` já está rodando em outra aba.
 
 ---
 
-## Demonstrando a simulação de lentidão/instabilidade do ERP
+## VI. Demonstrando a simulação de lentidão/instabilidade do ERP
 
 Esse é um pré-requisito explícito do case, então aqui vai o passo a passo direto:
 
@@ -255,7 +267,7 @@ O `erp-mock` (`erp-mock/src/app.ts`, endpoint `POST /erp/orders`) simula seis mo
 
 O backend tenta até 3 vezes, com timeout de 3s por tentativa e backoff de 1s/2s entre elas (`CheckoutService.settleWithErp`) — o pedido só é marcado `failed`/`ERP_PROCESSING_FAILED` depois de esgotar as três. Três formas de ver isso rodando, da mais rápida pra mais completa:
 
-#### 1. Automatizado, sem nenhum passo manual
+#### VI.a Automatizado, sem nenhum passo manual
 
 ```bash
 cd e2e
@@ -266,7 +278,9 @@ Isso sobe um segundo trio `erp-mock`+`backend`+`frontend` (portas 4001/3002/5174
 
 ![Pedido falhando após 3 tentativas reais contra um ERP que nunca responde a tempo](evidencias/06-erp-lento-timeout-real.gif)
 
-#### 2. Manual, via `scripts/scenarios.sh`
+*Figura 1 — suíte Playwright isolada (`test:erp-lento`) contra o backend e o `erp-mock` reais em `always-timeout`: 3 tentativas, cada uma perdendo a corrida de 3s, até a UI mostrar a falha final.*
+
+#### VI.b Manual, via `scripts/scenarios.sh`
 
 ```bash
 # terminal 1
@@ -292,7 +306,7 @@ O script acompanha o pedido até ele terminar `failed`. No log do backend, cada 
 
 Captura completa (todas as linhas, sem cortes) em [`evidencias/logs-backend.md`, seção 11](evidencias/logs-backend.md#11-erp-sempre-lento-always-timeout--promiserace-perdendo-contra-o-relógio).
 
-#### 3. Sem reiniciar nada — o modo `random` padrão já demonstra a instabilidade ao vivo
+#### VI.c Sem reiniciar nada — o modo `random` padrão já demonstra a instabilidade ao vivo
 
 ```bash
 scripts/scenarios.sh erp-random
@@ -302,7 +316,7 @@ Dispara 3 checkouts seguidos contra o backend já rodando do jeito padrão e mos
 
 Captura real de terminal cobrindo os três modos (`always-success`, `always-fail`, `always-timeout`) está em [`evidencias/logs-backend.md`](evidencias/logs-backend.md), comentada trecho a trecho.
 
-#### 4. Dois modos de instabilidade adicionais — `always-http-error` e `always-reset`
+#### VI.d Dois modos de instabilidade adicionais — `always-http-error` e `always-reset`
 
 ```bash
 # terminal 1
@@ -312,11 +326,11 @@ cd backend && ERP_SIM_MODE=always-http-error npm run start:dev   # ou always-res
 scripts/scenarios.sh erp-http-error   # ou: scripts/scenarios.sh erp-reset
 ```
 
-`always-timeout`/`always-fail` cobrem lentidão e uma resposta negativa; estes dois cobrem os dois jeitos restantes de um HTTP real falhar — um status de erro (`503`) e uma conexão derrubada — cada um batendo num branch de código diferente em `ErpService`/`CheckoutService` (detalhes na seção ["Limitações desta simulação"](#por-que-erp-mock-é-um-serviço-http-real-separado-e-não-uma-simulação-in-process) mais abaixo). Também cobertos por dois testes e2e reais contra o `erp-mock` de verdade (`backend/test/checkout.e2e-spec.ts`), não só pelo script manual. Captura de log de ambos em [`evidencias/logs-backend.md`, seções 12 e 13](evidencias/logs-backend.md#12-erp-responde-com-status-http-de-erro-real-always-http-error).
+`always-timeout`/`always-fail` cobrem lentidão e uma resposta negativa; estes dois cobrem os dois jeitos restantes de um HTTP real falhar — um status de erro (`503`) e uma conexão derrubada — cada um batendo num branch de código diferente em `ErpService`/`CheckoutService` (detalhes na seção ["Limitações desta simulação"](#viia-por-que-erp-mock-é-um-serviço-http-real-separado-e-não-uma-simulação-in-process) mais abaixo). Também cobertos por dois testes e2e reais contra o `erp-mock` de verdade (`backend/test/checkout.e2e-spec.ts`), não só pelo script manual. Captura de log de ambos em [`evidencias/logs-backend.md`, seções 12 e 13](evidencias/logs-backend.md#12-erp-responde-com-status-http-de-erro-real-always-http-error).
 
 ---
 
-## Arquitetura e principais decisões técnicas
+## VII. Arquitetura e principais decisões técnicas
 
 ```mermaid
 flowchart LR
@@ -327,9 +341,11 @@ flowchart LR
     BE -.->|"Map em memória:\nestoque · pedidos · idempotência"| BE
 ```
 
+*Figura 2 — visão geral da arquitetura: o frontend só fala com o backend (via proxy do Vite); o backend é o único cliente do `erp-mock`, tanto para buscar o catálogo no boot quanto para liquidar pedidos; estoque, pedidos e idempotência vivem em memória, dentro do próprio processo do backend.*
+
 > A reserva de estoque, os pedidos e as chaves de idempotência vivem inteiramente dentro do processo do backend — o `erp-mock` nunca é consultado durante a checagem-e-reserva, só na liquidação em segundo plano e na busca do catálogo no boot (ver as duas seções abaixo).
 
-### Por que `erp-mock` é um serviço HTTP real separado, e não uma simulação in-process?
+### VII.a Por que `erp-mock` é um serviço HTTP real separado, e não uma simulação in-process?
 
 `erp-mock` roda como processo HTTP separado (rede real, não uma classe in-process) para poder exercitar um timeout que corre contra o relógio de verdade, e para que o modo de simulação seja **stateless e controlado por header** — sem estado mutável compartilhado entre chamadas concorrentes.
 
@@ -347,6 +363,8 @@ flowchart TB
     end
 ```
 
+*Figura 3 — por que uma simulação in-process (à direita) não serviria: uma chamada de função no mesmo event loop nunca bloqueia de verdade nem derruba uma conexão de verdade. O `erp-mock` real (à esquerda) roda como processo HTTP separado, com socket próprio, então consegue reproduzir os dois efeitos de fato.*
+
 <details>
 <summary>Por que isso importa (detalhes)?</summary>
 
@@ -363,7 +381,7 @@ flowchart TB
 
 Nada disso invalida o que a simulação prova de fato (timeout real vencendo a corrida contra o relógio, isolamento entre chamadas concorrentes) — mas `erp-mock` continua sendo um dublê simplificado, não um cliente HTTP resiliente completo, e vale listar onde a fidelidade termina em vez de deixar a evidência parecer mais completa do que é.
 
-### Catálogo: o ERP é o dono dos dados, a loja só lê
+### VII.b Catálogo: o ERP é o dono dos dados, a loja só lê
 
 Produto/preço/estoque contábil vêm do `erp-mock` via `GET /erp/products`, buscados **uma única vez no boot** — o backend falha ao iniciar se o `erp-mock` não responder. Depois do boot, nenhuma chamada ao ERP acontece durante um checkout.
 
@@ -376,7 +394,7 @@ Esse é o mesmo princípio do plano de arquitetura incremental documentado em [`
 
 </details>
 
-### Por que NestJS, e não Express puro, no backend?
+### VII.c Por que NestJS, e não Express puro, no backend?
 
 Agilidade de implementação: o Nest roda sobre o próprio Express por baixo (`@nestjs/platform-express`, o adapter padrão — não é um substituto, é uma camada de estrutura em cima dele) e resolve nativamente, via decorators, quatro coisas que em Express puro seriam bibliotecas separadas para escolher, integrar e manter sincronizadas à mão: injeção de dependências, modularização, validação de entrada e documentação da API.
 
@@ -384,25 +402,25 @@ Agilidade de implementação: o Nest roda sobre o próprio Express por baixo (`@
 <summary>Por que isso importa (detalhes)?</summary>
 
 - **Injeção de dependências nativa** — cada `Service` recebe suas dependências pelo construtor, resolvidas automaticamente pelo container do Nest a partir do que cada `@Module` declara em `providers`/`imports`, sem fábrica manual escrita à mão. Exemplo real: `ProductsModule` injeta `ErpService` num provider assíncrono (`backend/src/products/products.module.ts`) puramente por declaração.
-- **Validação e documentação a partir da mesma fonte** — os decorators de `class-validator` (`@IsInt`, `@IsPositive`, ...) e de `@nestjs/swagger` (`@ApiProperty`, ...) convivem na mesma classe DTO (ex. `backend/src/checkout/checkout.dto.ts`). O `ValidationPipe` global (`backend/src/bootstrap.ts`) usa os primeiros para rejeitar payload inválido em runtime; o `SwaggerModule` usa os segundos para gerar a [documentação interativa](#itens-bônus-entregues) a partir do mesmíssimo arquivo — zero duplicação, documentação que não tem como ficar desatualizada em relação ao código.
+- **Validação e documentação a partir da mesma fonte** — os decorators de `class-validator` (`@IsInt`, `@IsPositive`, ...) e de `@nestjs/swagger` (`@ApiProperty`, ...) convivem na mesma classe DTO (ex. `backend/src/checkout/checkout.dto.ts`). O `ValidationPipe` global (`backend/src/bootstrap.ts`) usa os primeiros para rejeitar payload inválido em runtime; o `SwaggerModule` usa os segundos para gerar a [documentação interativa](#ii-itens-bônus-entregues) a partir do mesmíssimo arquivo — zero duplicação, documentação que não tem como ficar desatualizada em relação ao código.
 - **Contrato de erro centralizado** — um único `HttpExceptionFilter` global (`app.useGlobalFilters` em `bootstrap.ts`) mapeia toda exceção de domínio para o corpo de erro HTTP, em vez de tratamento espalhado por middleware customizado.
 - **Testes de integração contra a aplicação real** — `Test.createTestingModule({ imports: [AppModule] })` (`backend/test/utils/create-test-app.ts`) sobe a aplicação de verdade, com o mesmo grafo de dependências de produção, em vez de recriar rotas e validação à mão só para os testes.
 
-Em Express puro, cada um desses pontos seria uma biblioteca a mais para integrar (`express-validator`, `swagger-jsdoc`, middleware de erro próprio) e manter sincronizada manualmente — viável, mas é tempo de infraestrutura de framework, não de regra de negócio. É por isso que `erp-mock/` continua em Express puro e não vira uma segunda aplicação NestJS: é um dublê de teste de poucas linhas, sem regra de negócio nenhuma para essa agilidade importar (ver ["Por que `erp-mock` é um serviço HTTP real separado"](#por-que-erp-mock-é-um-serviço-http-real-separado-e-não-uma-simulação-in-process) acima).
+Em Express puro, cada um desses pontos seria uma biblioteca a mais para integrar (`express-validator`, `swagger-jsdoc`, middleware de erro próprio) e manter sincronizada manualmente — viável, mas é tempo de infraestrutura de framework, não de regra de negócio. É por isso que `erp-mock/` continua em Express puro e não vira uma segunda aplicação NestJS: é um dublê de teste de poucas linhas, sem regra de negócio nenhuma para essa agilidade importar (ver ["Por que `erp-mock` é um serviço HTTP real separado"](#viia-por-que-erp-mock-é-um-serviço-http-real-separado-e-não-uma-simulação-in-process) acima).
 
 </details>
 
-### Arquitetura do backend: Controller, Service, Module
+### VII.d Arquitetura do backend: Controller, Service, Module
 
 O backend segue uma estrutura NestJS direta — um `Controller`, um `Service`, um `Module` por assunto (`products/`, `orders/`, `idempotency/`, `erp/`, `checkout/`). Cada `Controller` faz apenas roteamento: nenhuma regra de negócio, nenhum mapeamento de erro para status HTTP (isso é centralizado uma única vez, no `HttpExceptionFilter` global). Cada `Service` é dono tanto da lógica de negócio quanto dos dados sobre os quais ela opera, em um só lugar, sem camadas de indireção adicionais entre o controller e a regra de negócio. Erros de domínio (produto não encontrado, estoque insuficiente, pedido não encontrado) são exceções tipadas que estendem `HttpException` diretamente, e métodos/variáveis usam o vocabulário real do negócio (`reserveStock`, `settleWithErp`, `idempotencyKey`) em vez de nomenclatura CRUD genérica.
 
 `ProductsService` combina o catálogo de produtos e a reserva de estoque no mesmo serviço porque `GET /products` precisa dos dois, e separá-los em dois serviços que dependem um do outro criaria uma dependência circular sem benefício nesta escala.
 
-### Armazenamento em memória, sem banco de dados ou cache externo
+### VII.e Armazenamento em memória, sem banco de dados ou cache externo
 
 Estoque, pedidos e chaves de idempotência vivem em `Map`s em memória, dentro do próprio processo do backend — adequado para um serviço de demonstração de vida curta, processo único. A garantia de correção que realmente importa é preservada mesmo sem infraestrutura externa: a operação de verificar-e-decrementar estoque roda como um passo indivisível porque permanece totalmente síncrona (sem `await` entre checar disponibilidade e reservar) dentro de um serviço singleton — o event loop do JavaScript nunca intercala duas chamadas à mesma função síncrona, então duas requisições concorrentes para a última unidade nunca podem ambas "passar" na verificação. O teste e2e de concorrência do backend (disparando várias tentativas de checkout simultâneas contra um produto com 1 unidade em estoque) é a garantia de regressão para isso.
 
-### Frontend: Tailwind e fotos reais dos produtos
+### VII.f Frontend: Tailwind e fotos reais dos produtos
 
 Interface responsiva em Tailwind v4, produto selecionado por cards clicáveis (não `<select>`), e `frontend/src/` organizado por responsabilidade — separação que nasceu de um bug real, não só de gosto.
 
@@ -425,11 +443,11 @@ Essa separação usa o mesmo vocabulário do backend (`services`) de propósito,
 
 </details>
 
-### Por que a idempotência só guarda em cache a resposta de sucesso?
+### VII.g Por que a idempotência só guarda em cache a resposta de sucesso?
 
 Uma requisição `POST /checkout` que falha na validação, ou aponta para um produto inexistente, ou esbarra em estoque insuficiente, é uma função pura da entrada e do nível de estoque atual — reenviar exatamente a mesma requisição recalcula exatamente a mesma resposta, sem efeito colateral para repetir acidentalmente. A única resposta que não é pura é o sucesso `202 pending`, porque ela tem um efeito colateral: cria um pedido e reserva estoque. Por isso só esse caminho é lembrado em relação à `Idempotency-Key` — reenviar a mesma chave retorna o pedido *original* em vez de criar um segundo pedido e reservar estoque em dobro.
 
-### Rastreabilidade: logs estruturados em todo o fluxo
+### VII.h Rastreabilidade: logs estruturados em todo o fluxo
 
 Cada classe tem seu próprio `Logger`, todo ponto de decisão é logado (não só erros), com formato `campo=valor` e duas chaves de correlação (`requestId`, `orderId`).
 
@@ -444,7 +462,7 @@ Duas chaves de correlação amarram essas linhas: um `requestId` curto, gerado p
 
 Uma captura real desses logs, cobrindo o caminho feliz, os quatro tipos de erro (`400`/`404`/`409`/pedido `failed`), duas tentativas concorrentes pela última unidade de um produto, o reaproveitamento idempotente, e o esgotamento das 3 tentativas contra o ERP, está em [`evidencias/logs-backend.md`](evidencias/logs-backend.md) (comentada cenário a cenário; a saída de terminal bruta e sem edições fica em [`evidencias/logs-backend.txt`](evidencias/logs-backend.txt)).
 
-### Fora de escopo
+### VII.i Fora de escopo
 
 - **Autenticação, pagamento real, deploy em nuvem, Docker obrigatório.**
 - **Carrinho com múltiplos itens** — o checkout permanece single-item (`productId` + `quantity`) porque nenhuma das garantias centrais deste projeto (consistência de estoque, idempotência, concorrência, contrato de erro) depende de um carrinho; adicionar um transformaria a reserva indivisível de um único produto em um problema de write-skew multi-objeto, exigindo um redesign, não uma extensão incremental.
@@ -455,7 +473,7 @@ Uma captura real desses logs, cobrindo o caminho feliz, os quatro tipos de erro 
 
 ---
 
-## Próximos passos: Redis (Fase 1) e Redis com fila (Fase 2)
+## VIII. Próximos passos: Redis (Fase 1) e Redis com fila (Fase 2)
 
 O em-memória deste mini-projeto é uma escolha deliberada de escopo, não desconhecimento do que uma versão de produção exige — as ADRs de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) já especificam essa evolução em fases, respondendo à Pergunta 1/2 de [`Parte 1.A — Perguntas Conceituais.md`](Parte%201.A%20—%20Perguntas%20Conceituais.md). A ideia é materializar essas duas fases como branches separadas do código real (não só como texto), para comparar as três versões lado a lado sob os mesmos testes de concorrência/idempotência: a branch [`redis`](https://github.com/alvaroaxsmith/casecellshop-checkout/tree/redis) (Fase 1) já existe e está validada com Redis de verdade; a Fase 2 (`redis-queue`) segue só planejada.
 
@@ -472,7 +490,7 @@ O em-memória deste mini-projeto é uma escolha deliberada de escopo, não desco
 
 ---
 
-## Contrato da API (resumo)
+## IX. Contrato da API (resumo)
 
 | Endpoint | Parâmetros | Sucesso | Erros |
 |---|---|---|---|
@@ -484,7 +502,7 @@ A versão exaustiva e sempre sincronizada com o código (gerada a partir dos mes
 
 Todo corpo de erro segue o mesmo formato: `{ "error": { "code": string, "message": string, "field"?: string } }` — `field` só aparece em `VALIDATION_ERROR`.
 
-### `GET /products`
+### IX.a `GET /products`
 
 Sem parâmetros. Sempre `200`:
 
@@ -496,7 +514,7 @@ Sem parâmetros. Sempre `200`:
 }
 ```
 
-### `POST /checkout`
+### IX.b `POST /checkout`
 
 Corpo da requisição:
 
@@ -513,19 +531,19 @@ Corpo da requisição:
 | `404 PRODUCT_NOT_FOUND` | `{ "error": { "code": "PRODUCT_NOT_FOUND", "message": "Produto não encontrado." } }` | `productId` não corresponde a um produto existente |
 | `409 OUT_OF_STOCK` | `{ "error": { "code": "OUT_OF_STOCK", "message": "Este produto está esgotado no momento." } }` | Estoque disponível é menor que a `quantity` pedida |
 
-Uma requisição repetida com uma `idempotencyKey` já vista (de qualquer uma das duas fontes) responde exatamente o mesmo corpo `202` da chamada original, sem passar por nenhuma dessas checagens de novo — ver [Por que a idempotência só guarda em cache a resposta de sucesso?](#por-que-a-idempotência-só-guarda-em-cache-a-resposta-de-sucesso) para o porquê de só esse desfecho ser cacheado.
+Uma requisição repetida com uma `idempotencyKey` já vista (de qualquer uma das duas fontes) responde exatamente o mesmo corpo `202` da chamada original, sem passar por nenhuma dessas checagens de novo — ver [Por que a idempotência só guarda em cache a resposta de sucesso?](#viig-por-que-a-idempotência-só-guarda-em-cache-a-resposta-de-sucesso) para o porquê de só esse desfecho ser cacheado.
 
-### `GET /orders/:id`
+### IX.c `GET /orders/:id`
 
 | Status | Corpo | Quando |
 |---|---|---|
 | `200` | `{ "orderId": "ord_000001", "status": "pending" \| "confirmed" }` | Pedido existe, ainda não falhou |
-| `200` | `{ "orderId": "ord_000001", "status": "failed", "error": { "code": "ERP_PROCESSING_FAILED", "message": "..." } }` | As 3 tentativas de liquidação com o ERP se esgotaram — ver [Demonstrando a simulação de lentidão/instabilidade do ERP](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) |
+| `200` | `{ "orderId": "ord_000001", "status": "failed", "error": { "code": "ERP_PROCESSING_FAILED", "message": "..." } }` | As 3 tentativas de liquidação com o ERP se esgotaram — ver [Demonstrando a simulação de lentidão/instabilidade do ERP](#vi-demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) |
 | `404 ORDER_NOT_FOUND` | `{ "error": { "code": "ORDER_NOT_FOUND", "message": "Pedido não encontrado." } }` | `id` não corresponde a um pedido existente |
 
 Repare que `failed` é sempre um `200`, nunca um status HTTP de erro à parte — a *requisição* para consultar o status teve sucesso; é o *pedido* que tem um desfecho terminal negativo, carregado no corpo, no mesmo formato de envelope usado para os erros HTTP dos outros endpoints.
 
-### Fallback: erro inesperado
+### IX.d Fallback: erro inesperado
 
 Qualquer exceção que não seja uma das exceções de domínio tipadas acima (um bug de verdade, não uma recusa de regra de negócio) ainda é capturada pelo `HttpExceptionFilter` global e vira uma resposta bem formada em vez de derrubar o processo ou vazar um stack trace:
 
@@ -542,11 +560,11 @@ com status HTTP `500`. Esse caminho não é esperado nos cenários normais do ca
 | **Sucesso** | `202` de `POST /checkout`, depois `status: "confirmed"` em `GET /orders/:id` | `{ orderId, status, statusUrl }` → `{ status: "confirmed" }` |
 | **Erro de validação** | `400 VALIDATION_ERROR` de `POST /checkout` | `{ error: { code: "VALIDATION_ERROR", message, field } }` |
 | **Estoque insuficiente** | `409 OUT_OF_STOCK` de `POST /checkout` | `{ error: { code: "OUT_OF_STOCK", message } }` |
-| **Falha técnica** (ERP lento/instável) | `202` inicial, depois `status: "failed"` em `GET /orders/:id` — nunca falha `POST /checkout` em si, porque a liquidação com o ERP é assíncrona (ver [seção dedicada](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp)) | `{ status: "failed", error: { code: "ERP_PROCESSING_FAILED", message } }` |
+| **Falha técnica** (ERP lento/instável) | `202` inicial, depois `status: "failed"` em `GET /orders/:id` — nunca falha `POST /checkout` em si, porque a liquidação com o ERP é assíncrona (ver [seção dedicada](#vi-demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp)) | `{ status: "failed", error: { code: "ERP_PROCESSING_FAILED", message } }` |
 
 ---
 
-## Evidências e testes automatizados
+## X. Evidências e testes automatizados
 
 A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bruto) de uma execução real da suíte `e2e/`, uma por cenário; os três mais recentes também têm uma versão `.gif` embutida aqui, pra não precisar baixar nada pra ver o resultado:
 
@@ -557,7 +575,9 @@ A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bru
 | Falha do ERP e retry | [`03-falha-erp-e-retry.webm`](evidencias/03-falha-erp-e-retry.webm) | Primeira tentativa falha (interceptação de rede do navegador, sem alterar código da aplicação), UI mostra a mensagem de falha temporária; segunda tentativa, sem interceptação, recupera normalmente |
 | Duplo clique bloqueado | [`04-duplo-clique-bloqueado.webm`](evidencias/04-duplo-clique-bloqueado.webm) | Botão "Comprar" vira "Processando..." e fica desabilitado assim que clicado — antes mesmo do pedido terminar |
 | Validação de quantidade inválida | [`05-validacao-quantidade-invalida.webm`](evidencias/05-validacao-quantidade-invalida.webm) | `quantity=0` enviado de verdade ao backend (sem bloqueio no front), volta `400` e a UI mostra a mensagem exata da validação |
-| ERP lento (real) | [`06-erp-lento-timeout-real.webm`](evidencias/06-erp-lento-timeout-real.webm) | Ver a [seção dedicada acima](#demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) — 3 tentativas reais perdendo a corrida contra o timeout, sem nenhuma simulação no navegador |
+| ERP lento (real) | [`06-erp-lento-timeout-real.webm`](evidencias/06-erp-lento-timeout-real.webm) | Ver a [seção dedicada acima](#vi-demonstrando-a-simulação-de-lentidãoinstabilidade-do-erp) — 3 tentativas reais perdendo a corrida contra o timeout, sem nenhuma simulação no navegador |
+
+*Tabela 1 — os 6 cenários gravados a partir da suíte `e2e/`, cada um com o `.webm` bruto linkado; os 3 mais recentes (04–06) têm também o `.gif` embutido nas seções correspondentes deste README.*
 
 > **Nota:** essas gravações não substituem a suíte automatizada — são uma amostra point-in-time de uma execução; a fonte da verdade é sempre rodar `npm test`/`npm run test:erp-lento` em `e2e/` (ou as suítes unitárias/e2e de cada pacote, na seção anterior).
 
@@ -582,7 +602,7 @@ A pasta [`evidencias/`](evidencias/) contém gravações em vídeo (`.webm`, bru
 
 ---
 
-## Leitura complementar
+## XI. Leitura complementar
 
 - [`specs/spec.md`](specs/spec.md) — a especificação comportamental completa: histórias de usuário, decisões de implementação, modelo de dados, decisões de teste, lista de fora de escopo.
 - [`specs/constitution.md`](specs/constitution.md) — governança do projeto: stack, diretrizes de código, arquitetura Controller/Service/Module, regras de teste.
