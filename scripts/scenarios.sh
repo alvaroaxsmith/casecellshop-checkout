@@ -16,8 +16,10 @@
 #   erp-failure         roda um checkout e reporta o desfecho real do ERP
 #   erp-random          3 checkouts em sequência, mostrando a instabilidade do modo random ao vivo
 #   erp-slow            checkout contra um backend em ERP_SIM_MODE=always-timeout (processamento lento de verdade)
+#   erp-http-error       checkout contra um backend em ERP_SIM_MODE=always-http-error (status HTTP de erro real)
+#   erp-reset            checkout contra um backend em ERP_SIM_MODE=always-reset (conexão derrubada de verdade)
 #   status <id>         consulta um pedido específico
-#   all                  roda os cenários acima (exceto erp-slow) em sequência
+#   all                  roda os cenários acima (exceto erp-slow/erp-http-error/erp-reset) em sequência
 #
 #   só nesta branch (redis):
 #   keys                 inspeciona as chaves no redis-cli
@@ -301,6 +303,64 @@ cmd_erp_slow() {
   warn "pedido ${order_id} ainda pending depois de 17s — confira o backend"
 }
 
+cmd_erp_http_error() {
+  header "ERP respondendo com status HTTP de erro real — modo always-http-error"
+  warn "só é determinístico se o backend tiver sido iniciado com \"ERP_SIM_MODE=always-http-error npm run start:dev\" (dentro de backend/)."
+  local key order_id
+  key=$(unique_key)
+  do_curl POST /checkout '{"productId":"capinha-preta","quantity":1,"idempotencyKey":"'"$key"'"}'
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  order_id=$(json_field "$RESP_BODY" "orderId")
+  info "pedido ${order_id} criado — cada tentativa a seguir recebe um 503 de verdade do erp-mock (não um success:false simulado em memória); procure no log do backend por \"httpStatus=503\""
+  local _
+  for _ in $(seq 1 34); do
+    do_curl GET "/orders/${order_id}"
+    local status
+    status=$(json_field "$RESP_BODY" "status")
+    if [ "$status" != "pending" ]; then
+      echo ""
+      print_response "$RESP_BODY" "$RESP_STATUS"
+      if [ "$status" = "failed" ]; then
+        ok "pedido terminou failed/ERP_PROCESSING_FAILED após 3 respostas 503 — o caminho \"if (!res.ok)\" de ErpService.call foi exercitado contra o erp-mock de verdade"
+      else
+        warn "pedido terminou '$status' — confira se o backend está mesmo rodando com ERP_SIM_MODE=always-http-error"
+      fi
+      return 0
+    fi
+    sleep 0.5
+  done
+  warn "pedido ${order_id} ainda pending depois de 17s — confira o backend"
+}
+
+cmd_erp_reset() {
+  header "ERP derrubando a conexão de verdade — modo always-reset"
+  warn "só é determinístico se o backend tiver sido iniciado com \"ERP_SIM_MODE=always-reset npm run start:dev\" (dentro de backend/)."
+  local key order_id
+  key=$(unique_key)
+  do_curl POST /checkout '{"productId":"capinha-preta","quantity":1,"idempotencyKey":"'"$key"'"}'
+  print_response "$RESP_BODY" "$RESP_STATUS"
+  order_id=$(json_field "$RESP_BODY" "orderId")
+  info "pedido ${order_id} criado — cada tentativa a seguir tem o socket derrubado pelo erp-mock (req.socket.destroy()), fazendo o fetch() do backend rejeitar em vez de resolver; procure no log do backend por \"Chamada ao ERP rejeitou\""
+  local _
+  for _ in $(seq 1 34); do
+    do_curl GET "/orders/${order_id}"
+    local status
+    status=$(json_field "$RESP_BODY" "status")
+    if [ "$status" != "pending" ]; then
+      echo ""
+      print_response "$RESP_BODY" "$RESP_STATUS"
+      if [ "$status" = "failed" ]; then
+        ok "pedido terminou failed/ERP_PROCESSING_FAILED após 3 conexões derrubadas — o try/catch de CheckoutService.settleWithErp foi exercitado com uma rejeição de rede de verdade, não mockada"
+      else
+        warn "pedido terminou '$status' — confira se o backend está mesmo rodando com ERP_SIM_MODE=always-reset"
+      fi
+      return 0
+    fi
+    sleep 0.5
+  done
+  warn "pedido ${order_id} ainda pending depois de 17s — confira o backend"
+}
+
 cmd_keys() {
   header "Chaves no Redis (redis-cli, sem passar pela API)"
   info "order:*"
@@ -396,7 +456,7 @@ cmd_all() {
   cmd_erp_failure
   cmd_erp_random
   header "Fim"
-  ok "todos os cenários rodaram — reveja os resultados acima (erp-slow fica de fora: exige reiniciar o backend com ERP_SIM_MODE=always-timeout, veja o README)"
+  ok "todos os cenários rodaram — reveja os resultados acima (erp-slow/erp-http-error/erp-reset ficam de fora: exigem reiniciar o backend com um ERP_SIM_MODE específico, veja o README)"
 }
 
 main() {
@@ -415,6 +475,8 @@ main() {
     erp-failure) cmd_erp_failure ;;
     erp-random) cmd_erp_random ;;
     erp-slow) cmd_erp_slow ;;
+    erp-http-error) cmd_erp_http_error ;;
+    erp-reset) cmd_erp_reset ;;
     status) cmd_status "${2:-}" ;;
     keys) cmd_keys ;;
     restart) cmd_restart "${2:-}" "${3:-}" ;;
@@ -435,8 +497,10 @@ main() {
       echo "  erp-failure         roda um checkout e reporta o desfecho real"
       echo "  erp-random          3 checkouts em sequência, mostrando a instabilidade do modo random ao vivo"
       echo "  erp-slow            checkout contra um backend em ERP_SIM_MODE=always-timeout (processamento lento de verdade)"
+      echo "  erp-http-error      checkout contra um backend em ERP_SIM_MODE=always-http-error (status HTTP de erro real)"
+      echo "  erp-reset           checkout contra um backend em ERP_SIM_MODE=always-reset (conexão derrubada de verdade)"
       echo "  status <id>         consulta um pedido específico"
-      echo "  all                 roda todos os cenários acima (exceto erp-slow) em sequência"
+      echo "  all                 roda todos os cenários acima (exceto erp-slow/erp-http-error/erp-reset) em sequência"
       echo ""
       echo "  só nesta branch (redis):"
       echo "  keys                 inspeciona as chaves order:*/product:stock:*/reservation:* direto no redis-cli"

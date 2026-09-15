@@ -168,6 +168,40 @@ describe("POST /checkout (e2e)", () => {
     expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
   }, 8000);
 
+  it("marks the order as failed when the ERP responds with a real non-2xx HTTP status on every attempt", async () => {
+    process.env.ERP_SIM_MODE = "always-http-error";
+    process.env.ERP_SIM_DELAY_MS = "10";
+
+    const res = await request(app.getHttpServer())
+      .post("/checkout")
+      .send({ productId: "capinha-transparente", quantity: 1, idempotencyKey: uniqueKey() });
+
+    expect(res.status).toBe(202);
+
+    await new Promise((resolve) => setTimeout(resolve, 3100)); // 2 backoffs of 1s+2s plus margin
+
+    const statusRes = await request(app.getHttpServer()).get(`/orders/${res.body.orderId}`);
+    expect(statusRes.body.status).toBe("failed");
+    expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
+  }, 8000);
+
+  it("marks the order as failed when the ERP drops the connection on every attempt (fetch rejects, not just a failed response)", async () => {
+    process.env.ERP_SIM_MODE = "always-reset";
+    process.env.ERP_SIM_DELAY_MS = "10";
+
+    const res = await request(app.getHttpServer())
+      .post("/checkout")
+      .send({ productId: "capinha-transparente", quantity: 1, idempotencyKey: uniqueKey() });
+
+    expect(res.status).toBe(202);
+
+    await new Promise((resolve) => setTimeout(resolve, 3100)); // 2 backoffs of 1s+2s plus margin
+
+    const statusRes = await request(app.getHttpServer()).get(`/orders/${res.body.orderId}`);
+    expect(statusRes.body.status).toBe("failed");
+    expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
+  }, 8000);
+
   it("marks the order as failed when the ERP never responds within the timeout window", async () => {
     process.env.ERP_SIM_MODE = "always-timeout";
     process.env.ERP_SIM_DELAY_MS = "5000"; // longer than the 3s per-attempt timeout
