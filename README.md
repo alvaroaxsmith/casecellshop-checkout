@@ -1,6 +1,6 @@
 # CaseCellShop — Checkout (branch `redis`)
 
-> **Esta branch demonstra a Fase 1 (Redis) da evolução descrita no README de `main`.** O checkout, o contrato HTTP e a UI são idênticos aos de `main` — a mesma suíte `e2e/` passa sem nenhuma alteração nela — só a infraestrutura por baixo mudou: reserva de estoque, idempotência e persistência de pedidos deixam de viver em `Map`s do processo Node e passam a viver no Redis (script Lua para atomicidade, TTL nativo para expiração de reserva). O objetivo é validar as ADR-001/002/003 de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) contra infraestrutura de verdade, não só como texto. O que mudou em relação a `main` está resumido em ["Armazenamento: Redis, não mais em memória"](#armazenamento-redis-não-mais-em-memória) mais abaixo; o resto deste README é herdado de `main` e continua valendo sem alteração.
+> **Esta branch demonstra a Fase 1 (Redis) da evolução descrita no README de `main`.** O checkout, o contrato HTTP e a UI são idênticos aos de `main` — a mesma suíte `e2e/` passa sem nenhuma alteração nela — só a infraestrutura por baixo mudou: reserva de estoque, idempotência e persistência de pedidos deixam de viver em `Map`s do processo Node e passam a viver no Redis (script Lua para atomicidade, TTL nativo para expiração de reserva). O objetivo é validar as ADR-001/002/003 de [`referencias/decisoes-tecnicas.md`](referencias/decisoes-tecnicas.md) contra infraestrutura de verdade, não só como texto. O que mudou em relação a `main` está resumido em ["Armazenamento: Redis"](#armazenamento-redis-não-mais-em-memória) mais abaixo; o resto deste README é herdado de `main` e continua valendo sem alteração.
 
 Uma fatia fullstack executável de uma jornada de checkout de e-commerce: o cliente escolhe um produto e uma quantidade, tenta comprar, e o sistema garante que nunca vende além do estoque disponível, nunca duplica um pedido em caso de retry ou duplo clique, e sempre responde rápido mesmo quando o sistema de ERP usado como backend de faturamento está lento ou instável.
 
@@ -362,7 +362,7 @@ O backend segue uma estrutura NestJS direta — um `Controller`, um `Service`, u
 
 `ProductsService` combina o catálogo de produtos e a reserva de estoque no mesmo serviço porque `GET /products` precisa dos dois, e separá-los em dois serviços que dependem um do outro criaria uma dependência circular sem benefício nesta escala.
 
-### Armazenamento: Redis, não mais em memória
+### Armazenamento: Redis
 
 Estoque, pedidos e chaves de idempotência vivem no Redis (`docker-compose.yml`, persistência AOF habilitada) em vez de `Map`s no processo do backend — **a diferença central desta branch em relação a `main`, e o motivo dela existir**. A mesma garantia de correção (nunca vender além do estoque) continua vindo de uma operação indivisível, só que sustentada por um mecanismo diferente: em `main`, o event loop síncrono do Node garante que duas chamadas à mesma função nunca se intercalam; aqui, é o Redis que garante que um script Lua roda do início ao fim sem interrupção de outro comando — a mesma classe de garantia (atomicidade), infraestrutura diferente por baixo.
 
