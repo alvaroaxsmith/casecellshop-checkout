@@ -333,12 +333,26 @@ flowchart LR
 
 `erp-mock` roda como processo HTTP separado (rede real, não uma classe in-process) para poder exercitar um timeout que corre contra o relógio de verdade, e para que o modo de simulação seja **stateless e controlado por header** — sem estado mutável compartilhado entre chamadas concorrentes.
 
+```mermaid
+flowchart TB
+    subgraph A["Simulação in-process — não usada aqui"]
+        direction LR
+        BA["Backend"] -->|"chamada de função\nmesmo processo, mesmo event loop"| FA["Classe fake\nsetTimeout simulado"]
+        FA -->|"nunca bloqueia o event loop de verdade\nnunca derruba uma conexão de verdade"| BA
+    end
+    subgraph B["erp-mock real — usada aqui"]
+        direction LR
+        BB["Backend\nprocesso próprio · porta 3001"] -->|"POST /erp/orders\nheader X-Erp-Simulate-Mode\nHTTP real, socket real, nada guardado entre chamadas"| EB["erp-mock\nprocesso próprio · porta 4000"]
+        EB -->|"resposta em 10s (always-timeout)\nou socket derrubado (always-reset)"| BB
+    end
+```
+
 <details>
 <summary>Por que isso importa (detalhes)?</summary>
 
-O backend chama o `erp-mock` através de uma fronteira de rede real (HTTP, processo próprio, porta própria) em vez de simular o comportamento do ERP com uma classe in-process. Essa é uma escolha deliberada de gestão de risco, não incidental: uma simulação in-process não consegue exercitar os modos de falha que realmente importam para a resiliência do checkout — um timeout que de fato precisa correr contra o relógio (`Promise.race` perdendo, não apenas uma função retornando um erro), uma resposta lenta competindo com o próprio event loop do backend, e (arquiteturalmente, ver limitações abaixo) reset de conexão. Um segundo processo real também é o que obriga o modo de simulação do `erp-mock` a ser **stateless e controlado por header**, em vez de configuração no lado do servidor: duas tentativas de checkout concorrentes na mesma execução de teste podem exigir comportamentos simulados diferentes (`always-success` vs. `always-timeout`) sem disputar um estado mutável compartilhado.
-
-O `erp-mock` é um serviço Express simples, e não uma segunda aplicação NestJS — é um dublê de teste representando um sistema fora do controle deste projeto, não parte do produto sendo construído.
+- **Timeout real, não fingido.** O backend disputa `Promise.race` entre a chamada ao ERP e um timer de 3s (`checkout.service.ts`). Numa simulação in-process, "perder a corrida" seria só uma função retornando um erro; contra o `erp-mock`, é uma requisição HTTP de verdade ainda em voo quando o timer vence — o mesmo tipo de contenção pelo event loop que uma chamada de rede real causaria.
+- **Stateless e controlado por header, não por configuração do servidor.** Por ser um processo de rede separado, o modo de simulação (`X-Erp-Simulate-Mode`) chega em cada requisição — não fica guardado como estado do servidor. Duas tentativas de checkout concorrentes na mesma suíte de testes podem pedir comportamentos diferentes (`always-success` numa, `always-timeout` noutra) sem uma disputar o estado da outra.
+- **Um dublê de teste, não um produto.** `erp-mock` é um serviço Express simples, não uma segunda aplicação NestJS — representa um sistema fora do controle deste projeto, não parte do que está sendo construído.
 
 </details>
 
@@ -346,8 +360,6 @@ O `erp-mock` é um serviço Express simples, e não uma segunda aplicação Nest
 
 - Os dois processos rodam em `localhost` — sem a latência, perda de pacote, DNS ou negociação TLS de uma rede real. A fronteira HTTP é real; as condições de rede de produção, não. Simular isso de verdade (`tc`/`netem`, proxy com latência injetada) foi considerado fora de escopo deliberadamente: infraestrutura desproporcional para um mini-projeto, e tende a deixar a suíte de testes flaky em vez de mais fiel.
 - O modo `random` usa `Math.random()` sem seed — realista para uma demonstração, mas não reproduzível fora dos modos determinísticos por header (`always-*`). Não seedado de propósito: os modos determinísticos já servem exatamente esse propósito onde reprodutibilidade importa (testes automatizados nunca usam `random`), então seedar só adicionaria complexidade sem ganho real.
-
-Duas limitações que existiam aqui foram fechadas depois de identificadas: `erp-mock` só respondia HTTP `200` em todo modo, então o `if (!res.ok)` de `ErpService.call`/`fetchCatalog` nunca era exercitado contra o serviço real — hoje o modo `always-http-error` responde com um `503` de verdade. E `always-timeout` só simulava lentidão, nunca um reset de conexão — hoje o modo `always-reset` derruba o socket com `req.socket.destroy()`, fazendo o `fetch()` do backend rejeitar de verdade em vez de só resolver com `success: false`. Os dois têm teste e2e contra o `erp-mock` real (`backend/test/checkout.e2e-spec.ts`) e evidência de log capturada (ver a [seção 4 acima](#4-dois-modos-de-instabilidade-adicionais--always-http-error-e-always-reset)).
 
 Nada disso invalida o que a simulação prova de fato (timeout real vencendo a corrida contra o relógio, isolamento entre chamadas concorrentes) — mas `erp-mock` continua sendo um dublê simplificado, não um cliente HTTP resiliente completo, e vale listar onde a fidelidade termina em vez de deixar a evidência parecer mais completa do que é.
 
