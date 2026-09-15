@@ -10,12 +10,25 @@ vi.mock("../src/services/products.service");
 vi.mock("../src/services/checkout.service");
 vi.mock("../src/services/orders.service");
 
+beforeEach(() => {
+  vi.resetAllMocks();
+});
 afterEach(cleanup);
+
+const PRODUCT_IMAGE_URL = "https://images.unsplash.com/photo-1764053430686-5435fe548fca";
+const PRODUCT_IMAGE_ALT = "Capinha preta fosca em detalhe, apoiada sobre a caixa do aparelho";
 
 describe("App - product list", () => {
   beforeEach(() => {
     vi.mocked(productsService.fetchProducts).mockResolvedValue([
-      { id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 5, imageUrl: "", imageAlt: "" },
+      {
+        id: "capinha-preta",
+        name: "Capinha Preta Fosca",
+        priceCents: 3990,
+        stock: 5,
+        imageUrl: PRODUCT_IMAGE_URL,
+        imageAlt: PRODUCT_IMAGE_ALT,
+      },
     ]);
   });
 
@@ -24,6 +37,16 @@ describe("App - product list", () => {
     await waitFor(() => {
       expect(screen.getByText(/Capinha Preta Fosca/)).toBeInTheDocument();
     });
+  });
+
+  it("renders the product photo with a responsive srcset built from imageUrl", async () => {
+    render(<App />);
+    const img = await screen.findByAltText(PRODUCT_IMAGE_ALT);
+    expect(img).toHaveAttribute("src", `${PRODUCT_IMAGE_URL}?auto=format&fit=crop&w=480&q=80`);
+    expect(img).toHaveAttribute(
+      "srcset",
+      `${PRODUCT_IMAGE_URL}?auto=format&fit=crop&w=240&q=80 240w, ${PRODUCT_IMAGE_URL}?auto=format&fit=crop&w=480&q=80 480w, ${PRODUCT_IMAGE_URL}?auto=format&fit=crop&w=720&q=80 720w`,
+    );
   });
 });
 
@@ -95,6 +118,29 @@ describe("App - checkout flow", () => {
     });
   });
 
+  it("keeps polling while the order is still pending, then shows success once it confirms", async () => {
+    vi.mocked(checkoutService.postCheckout).mockResolvedValue({
+      statusCode: 202,
+      body: { orderId: "ord_000005", status: "pending", statusUrl: "/orders/ord_000005" },
+    });
+    vi.mocked(ordersService.fetchOrderStatus)
+      .mockResolvedValueOnce({ orderId: "ord_000005", status: "pending" })
+      .mockResolvedValueOnce({ orderId: "ord_000005", status: "confirmed" });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Capinha Preta Fosca")).toBeInTheDocument());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole("status")).toHaveTextContent(/compra confirmada/i);
+      },
+      { timeout: 2000 },
+    );
+    expect(ordersService.fetchOrderStatus).toHaveBeenCalledTimes(2);
+  });
+
   it("shows the failure message once polling reports a failed order", async () => {
     vi.mocked(checkoutService.postCheckout).mockResolvedValue({
       statusCode: 202,
@@ -153,5 +199,38 @@ describe("App - checkout flow", () => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /comprar/i })).not.toBeDisabled();
+  });
+
+  it("shows a connection error if polling itself fails after the order was accepted", async () => {
+    vi.mocked(checkoutService.postCheckout).mockResolvedValue({
+      statusCode: 202,
+      body: { orderId: "ord_000004", status: "pending", statusUrl: "/orders/ord_000004" },
+    });
+    vi.mocked(ordersService.fetchOrderStatus).mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Capinha Preta Fosca")).toBeInTheDocument());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/não foi possível falar com o servidor/i);
+    });
+  });
+
+  it("shows a generic error message when the checkout response is neither an accepted order nor a typed error", async () => {
+    vi.mocked(checkoutService.postCheckout).mockResolvedValue({
+      statusCode: 500,
+      body: {} as never,
+    });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Capinha Preta Fosca")).toBeInTheDocument());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /comprar/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/ocorreu um erro inesperado/i);
+    });
   });
 });
