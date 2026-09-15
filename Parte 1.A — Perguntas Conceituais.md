@@ -304,7 +304,10 @@ O contrato abaixo aceita um produto e uma quantidade por tentativa — não um c
 - **Delego**: código repetitivo, testes, documentação, explorar alternativas de design.
 - **Não delego**: a decisão final de arquitetura, o desenho de estoque/reserva/idempotência, e a lógica de concorrência — pontos onde um erro sutil afeta venda ou estoque de verdade.
 - **Como verifico**: rodo os testes (principalmente o de concorrência), releio à mão qualquer trecho que mexa com a operação de checar-e-descontar estoque, e comparo com os critérios do case.
-- **Riscos de aceitar sem revisar**: a IA pode sugerir uma solução de concorrência que parece certa mas tem uma brecha sutil (ex. checar e escrever em dois passos separados, reabrindo o problema 2), ou escrever um teste que não testa de verdade o cenário de concorrência — por isso essas partes exigem leitura crítica, não só rodar e ver que passou.
+- **Riscos de aceitar sem revisar**: 
+  - Introdução de Alucinações: Como uma LLM é essencialmente uma máquina de predição da próxima palavra, ela pode gerar lógicas, funções ou bibliotecas que parecem absolutamente corretas, mas que não existem ou estão erradas. Sem revisão, essas alucinações vão direto para o código-fonte.
+  - Uso de Conteúdo Desatualizado: Como os modelos são treinados com recortes de dados da internet, a sugestão gerada pode utilizar versões antigas de bibliotecas, APIs descontinuadas ou padrões de projeto defasados.
+  - Perda de Contexto e Quebra de Arquitetura: Modelos são "stateless" (sem estado) e dependem inteiramente do que é enviado na janela de contexto a cada chamada. Se a janela ficar muito grande ou o prompt for impreciso, a IA pode perder o contexto geral da aplicação, gerando trechos de código que não se integram corretamente com o restante do sistema.
 
 ---
 
