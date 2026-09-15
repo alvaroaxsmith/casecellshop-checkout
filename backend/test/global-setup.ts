@@ -23,7 +23,6 @@ async function waitForHealth(url: string, attempts = 40): Promise<void> {
       const res = await fetch(url);
       if (res.ok) return;
     } catch {
-      // erp-mock isn't listening yet — keep polling
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }

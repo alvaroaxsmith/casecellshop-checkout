@@ -31,9 +31,6 @@ describe("OrdersService", () => {
     const order = service.createOrder("capinha-preta", 1);
     service.markConfirmed(order.id);
 
-    // Same class of guard as ProductsService.confirmReservation/
-    // releaseReservation — a real double-debit bug was once found there from
-    // exactly this kind of missing check (see PROMPTS.md).
     service.markConfirmed(order.id);
     service.markFailed(order.id, "ERP_PROCESSING_FAILED", "should be ignored");
 

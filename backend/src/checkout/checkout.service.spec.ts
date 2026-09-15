@@ -82,8 +82,6 @@ describe("CheckoutService", () => {
 
       await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
 
-      // Attempt 1 resolves immediately (mocked), then the two documented
-      // backoffs (1s, 2s) have to elapse for attempts 2 and 3 to fire.
       await jest.advanceTimersByTimeAsync(0);
       await jest.advanceTimersByTimeAsync(1000);
       await jest.advanceTimersByTimeAsync(2000);
@@ -114,9 +112,7 @@ describe("CheckoutService", () => {
       await jest.advanceTimersByTimeAsync(2000);
       await jest.advanceTimersByTimeAsync(0);
 
-      // Same terminal outcome as an explicit { success: false } — a thrown/
-      // rejected erp.call() never becomes an unhandled rejection or crashes
-      // the retry loop.
+
       expect(erp.call).toHaveBeenCalledTimes(3);
       expect(products.releaseReservation).toHaveBeenCalledWith("ord_1");
       expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "ERP_PROCESSING_FAILED", expect.any(String));
@@ -136,8 +132,6 @@ describe("CheckoutService", () => {
       erp.call.mockResolvedValue({ success: true });
 
       await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
-      // settleWithErp runs detached in the background — let its pending
-      // microtask (the already-resolved erp.call()) settle.
       await jest.advanceTimersByTimeAsync(0);
 
       expect(erp.call).toHaveBeenCalledTimes(1);
@@ -159,9 +153,6 @@ describe("CheckoutService", () => {
       orders.getOrder.mockReturnValue(order);
       products.reserveStock.mockReturnValue(true);
       erp.call.mockResolvedValue({ success: true });
-      // Outside settleWithErp's own try/catch (which only wraps the ERP
-      // call itself) — this is what the .catch() around the detached
-      // settleWithErp() call in checkout() exists to protect against.
       products.confirmReservation.mockImplementation(() => {
         throw new Error("unexpected failure inside confirmReservation");
       });

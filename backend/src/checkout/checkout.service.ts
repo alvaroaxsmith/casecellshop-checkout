@@ -25,11 +25,6 @@ export class CheckoutService {
     private readonly erp: ErpService,
   ) {}
 
-  // requestId correlaciona estas linhas com a entrada/saída HTTP logada pelo
-  // RequestLoggerMiddleware. A partir do momento em que um pedido existe,
-  // orderId passa a ser a chave de correlação — inclusive na liquidação
-  // assíncrona com o ERP, que roda bem depois da resposta HTTP já ter sido
-  // enviada e por isso não tem mais um requestId "ativo" a que se prender.
   async checkout(dto: CheckoutDto, headerKey?: string, requestId?: string): Promise<CheckoutSuccessBody> {
     const idempotencyKey = headerKey ?? dto.idempotencyKey;
     const ctx = `requestId=${requestId ?? "-"} productId=${dto.productId} quantity=${dto.quantity} idempotencyKey=${idempotencyKey ?? "-"}`;

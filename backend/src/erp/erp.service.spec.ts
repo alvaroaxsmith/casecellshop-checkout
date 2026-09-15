@@ -1,14 +1,5 @@
 import { ErpService } from "./erp.service";
 
-// Único ponto do código que fala HTTP com o erp-mock de verdade. call()'s
-// caminho de erro (ERP_SIM_MODE=always-http-error/always-reset) já é
-// exercitado contra o erp-mock rodando de verdade em
-// backend/test/checkout.e2e-spec.ts — os testes abaixo continuam existindo
-// porque cobrem o mesmo comportamento de forma mais rápida e isolada, sem
-// depender de um processo HTTP real de pé. fetchCatalog() é diferente: só
-// falha uma vez, no boot do módulo, então não há um cenário e2e razoável
-// pra provocar isso contra o erp-mock real — aqui continua sendo a única
-// cobertura que existe para esse caminho.
 describe("ErpService", () => {
   const realFetch = global.fetch;
   let service: ErpService;
@@ -34,9 +25,6 @@ describe("ErpService", () => {
       expect(catalog).toEqual([{ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" }]);
     });
 
-    // This is the failure mode documented in the README as "the backend
-    // fails to boot if it can't reach erp-mock" — ProductsModule's factory
-    // provider relies on this throwing, not on a fallback empty catalog.
     it("throws when erp-mock responds with a non-ok status, instead of booting with an empty catalog", async () => {
       global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
 

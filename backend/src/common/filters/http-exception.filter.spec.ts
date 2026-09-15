@@ -25,10 +25,6 @@ describe("HttpExceptionFilter", () => {
     expect(json).toHaveBeenCalledWith({ error: { code: "OUT_OF_STOCK", message: "Sem estoque." } });
   });
 
-  // The one path nothing else in the app ever exercises: an exception that
-  // isn't one of our typed HttpExceptions (a real bug, not a business-rule
-  // rejection) still has to produce a well-formed 500, never crash the
-  // process or leak a stack trace to the client.
   it("turns an unexpected, non-HttpException error into a generic 500", () => {
     const filter = new HttpExceptionFilter();
     const { host, status, json } = fakeHost("req-1");
@@ -55,8 +51,6 @@ describe("HttpExceptionFilter", () => {
   it("falls back to the exception's own message when the body has no error.code/message (a plain Nest HttpException, not one of our typed ones)", () => {
     const filter = new HttpExceptionFilter();
     const { host, status, json } = fakeHost("req-1");
-    // getResponse() on a plain HttpException("Forbidden", ...) returns the
-    // string itself, not an { error } object — so body.error is undefined.
     const exception = new HttpException("Forbidden", HttpStatus.FORBIDDEN);
 
     expect(() => filter.catch(exception, host)).not.toThrow();

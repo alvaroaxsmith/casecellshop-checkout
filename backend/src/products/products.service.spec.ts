@@ -1,8 +1,5 @@
 import { ProductsService, Product } from "./products.service";
 
-// Uma fábrica, não uma constante: reserveStock/confirmReservation mutam o
-// objeto do produto (débito de estoque), então cada teste precisa da sua
-// própria cópia — reusar a mesma referência vazaria estado entre testes.
 function testCatalog(): Product[] {
   return [
     { id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 5, imageUrl: "", imageAlt: "" },
@@ -73,8 +70,6 @@ describe("ProductsService", () => {
       service.reserveStock("ord_1", "capinha-preta", 1);
       expect(service.availableStock("capinha-preta")).toBe(4);
 
-      // No confirmReservation/releaseReservation call — the TTL alone (2min,
-      // see RESERVATION_TTL_MS) has to be what frees the stock back up.
       Date.now = () => start + 2 * 60 * 1000 + 1;
       expect(service.availableStock("capinha-preta")).toBe(5);
     } finally {

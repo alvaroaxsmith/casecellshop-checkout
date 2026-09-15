@@ -124,8 +124,6 @@ describe("POST /checkout (e2e)", () => {
     const first = await request(app.getHttpServer())
       .post("/checkout")
       .send({ productId: "capinha-preta", quantity: 1, idempotencyKey: key });
-    // Same key, different product and quantity — the cached response for the
-    // key wins; no second order is created for capinha-listrada.
     const second = await request(app.getHttpServer())
       .post("/checkout")
       .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: key });
@@ -219,8 +217,6 @@ describe("POST /checkout (e2e)", () => {
     expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
   }, 15000);
 
-  // Last on purpose: buys out whatever stock capinha-transparente has left
-  // at this point in the file, so it can't starve any test that runs after it.
   it("under N concurrent purchases, exactly as many succeed as there is available stock", async () => {
     process.env.ERP_SIM_MODE = "always-success";
     process.env.ERP_SIM_DELAY_MS = "10";

@@ -24,12 +24,6 @@ export class ProductsService {
 
   private readonly reservations = new Map<string, Reservation>();
 
-  // O catálogo (produto, preço, estoque contábil, imagem) é carregado uma
-  // única vez do ERP na inicialização (ver ProductsModule) — o ERP é o dono
-  // desses dados, a loja só lê. A partir daqui, porém, a reserva e o débito
-  // de estoque são inteiramente locais a este processo: nenhum método deste
-  // serviço faz uma chamada de rede, o que é o que garante a operação
-  // indivisível de checar-e-reservar (ver reserveStock).
   constructor(private readonly products: Product[]) {}
 
   listProducts(): Product[] {

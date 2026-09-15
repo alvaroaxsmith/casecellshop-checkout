@@ -21,12 +21,6 @@ function erpBaseUrl(): string {
 export class ErpService {
   private readonly logger = new Logger(ErpService.name);
 
-  // Chamado uma vez, na inicialização do módulo de produtos (ver
-  // ProductsModule), para carregar o catálogo do ERP — produto, preço e
-  // estoque contábil são dados de propriedade do ERP, a loja só lê essa
-  // base. Depois de carregado, a reserva/decremento de estoque continua
-  // inteiramente local ao processo do backend (ver ProductsService):
-  // nenhuma chamada síncrona ao ERP acontece durante um checkout.
   async fetchCatalog(): Promise<ErpProduct[]> {
     const url = `${erpBaseUrl()}/erp/products`;
     this.logger.log(`Buscando catálogo no erp-mock — url=${url}`);
