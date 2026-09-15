@@ -94,7 +94,7 @@ Todo item do checklist de avaliação do case, com onde exatamente verificar cad
 
 ### III.a Pré-requisitos
 
-- Node.js 20 LTS
+- Node.js 20 LTS ou superior — [`.nvmrc`](.nvmrc) na raiz do repositório fixa a versão exata usada no desenvolvimento, mas Node 20 LTS ou mais recente funciona igual
 - npm
 
 ### III.b Em um único comando

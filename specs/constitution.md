@@ -4,7 +4,7 @@ This document is the project's highest authority. Any spec, plan, ADR, or line o
 
 ## Stack and Technologies
 
-- **Runtime**: Node.js 20 LTS, pinned via `.nvmrc` and `package.json`'s `engines` field in every package — the same version in development and CI, so "works on my machine" is never caused by an engine mismatch.
+- **Runtime**: Node.js 20 LTS or newer, pinned via a single `.nvmrc` at the repo root — the same version in development and CI, so "works on my machine" is never caused by an engine mismatch.
 - **Backend**: NestJS + TypeScript. Nest's modular architecture (feature modules) as the project's default structure — no single monolithic `app.ts`.
 - **ERP mock**: a standalone, lightweight Express + TypeScript service in its own package (`erp-mock/`), simulating the external ERP as a real HTTP dependency the backend calls over the network — not an in-process fake. It is a test double for a system outside our control, not part of the product being built, so it stays a plain Express app instead of a second NestJS service; it still follows every project-wide rule (TypeScript strict, no `any`, ESLint/Prettier, Semantic Commits with its own scope, e.g. `feat(erp-mock): ...`).
 - **Frontend**: React + TypeScript, **without Next.js**. Build tool: Vite. Routing (when needed): React Router, not Next's file-based routing.
