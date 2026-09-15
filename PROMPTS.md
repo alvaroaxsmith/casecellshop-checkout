@@ -54,21 +54,6 @@ MCPs (Model Context Protocol) disponíveis no ambiente, e como foram (ou não) u
 - **GitHub** — habilitado no ambiente para operações de repositório; a interação real com o Git neste projeto, porém, foi feita quase inteiramente via linha de comando (`git`), visível no histórico de commits regular deste repositório — o MCP ficou disponível como alternativa, não como caminho principal, já que não houve fluxo de Pull Request neste mini-projeto (push direto em `main`/`redis`).
 - **Playwright (navegador)** — não é o que roda a suíte `e2e/`: aquela suíte usa o pacote `@playwright/test` real, executado via `npm test` dentro do pacote, como qualquer teste automatizado do projeto. O MCP de navegador fica disponível à parte, para inspeção visual pontual da UI durante o desenvolvimento — um passo de verificação manual, não algo que produz artefato versionado.
 
-## Prompts mais relevantes (fase de refinamento pós-entrega)
-
-A tabela abaixo reproduz, quase sempre ao pé da letra, os pedidos do usuário que mais mudaram o rumo do trabalho depois da entrega inicial — em especial os que corrigiram um caminho errado que a IA tinha tomado. Preservados porque mostram onde o julgamento humano foi decisivo, não só o resultado final:
-
-| Prompt (literal) | O que mudou |
-|---|---|
-| "tirar a cobertura de testes/coverage que nao faz sentido para nao induzir falso/baixos resultados" | Interpretado errado à primeira leitura como "apagar o relatório de cobertura" — removido, depois revertido assim que o mal-entendido ficou claro |
-| "na verdade era para comentar nos testes para remover os que estao abaixando a cobertura nao remover o relatorio de cobertura completo das evidencias" | Correção: o relatório volta; o alvo real eram testes/funções específicos puxando a cobertura pra baixo, não o documento inteiro |
-| "é para remover ou comentar as funcoes que realmente nao fazem sentido existirem e estao abaixando a cobertura" | Rejeitou uma tentativa de excluir arquivos da cobertura via config do Jest (`coveragePathIgnorePatterns`) — reduzir o escopo medido não é o mesmo que fechar a lacuna de verdade |
-| "nao faca comentarios no codigo" | Rejeitou comentários explicativos adicionados a `products.service.ts`/`orders.service.ts` para justificar cobertura baixa — a resposta certa era escrever testes de verdade, não documentar a ausência deles |
-| "aumente a cobertura" (anotado na linha de cobertura do backend, selecionada direto no editor) | Disparou uma rodada focada especificamente na cobertura de testes unitários do backend (81.27% → 97.71%, 39 testes), sem tocar em código de produção |
-| "a fim de deixar os titulos mais visiveis e organizados, enumere todo o readme com numeros e numeros romanos tambem, organize da forma que achar melhor" | Numeração completa do README (I–XI + sub-seções), com liberdade explícita de organização |
-| "numero romano com numero comun ficou estranho, por exemplo IV.1, melhor IV.a" + "nao entendi tambem o VII.9 do nada" | Ajustou o esquema (letra em vez de número arábico nas sub-seções) e expôs a lista completa da seção VII no sumário — uma numeração que fazia sentido para quem escreveu, mas não para quem lê |
-| "concerte as legendas" (acompanhado de um print da seção renderizada) | Uma legenda descrevia "topo"/"embaixo" quando o GitHub renderizou o diagrama lado a lado — corrigida a partir da evidência visual real, não da suposição de como o Mermaid ia layoutar |
-
 ## Nota sobre o idioma dos documentos
 
 Os documentos de processo (`specs/*.md`) ficaram em inglês; os documentos voltados para quem avalia (`README.md`, este arquivo) ficaram em português. Além de ser o idioma de quem lê a entrega, inglês tokeniza de forma mais eficiente em modelos de linguagem (menos tokens por unidade de informação) e tende a produzir raciocínio mais consistente em tarefas de instrução estruturada — relevante aqui porque os documentos de spec são relidos por múltiplos subagentes ao longo da execução.
