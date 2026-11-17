@@ -1,10 +1,10 @@
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
-import * as productsService from "../src/services/products.service";
 import * as checkoutService from "../src/services/checkout.service";
 import * as ordersService from "../src/services/orders.service";
+import * as productsService from "../src/services/products.service";
 
 vi.mock("../src/services/products.service");
 vi.mock("../src/services/checkout.service");
@@ -88,7 +88,9 @@ describe("App - checkout flow", () => {
   it("shows the validation message when the quantity is invalid", async () => {
     vi.mocked(checkoutService.postCheckout).mockResolvedValue({
       statusCode: 400,
-      body: { error: { code: "VALIDATION_ERROR", message: "A quantidade deve ser maior que zero.", field: "quantity" } },
+      body: {
+        error: { code: "VALIDATION_ERROR", message: "A quantidade deve ser maior que zero.", field: "quantity" },
+      },
     });
     render(<App />);
     await waitFor(() => expect(screen.getByText("Capinha Preta Fosca")).toBeInTheDocument());
@@ -149,7 +151,10 @@ describe("App - checkout flow", () => {
     vi.mocked(ordersService.fetchOrderStatus).mockResolvedValue({
       orderId: "ord_000002",
       status: "failed",
-      error: { code: "ERP_PROCESSING_FAILED", message: "Não conseguimos concluir seu pedido agora. Tente novamente em instantes." },
+      error: {
+        code: "ERP_PROCESSING_FAILED",
+        message: "Não conseguimos concluir seu pedido agora. Tente novamente em instantes.",
+      },
     });
     render(<App />);
     await waitFor(() => expect(screen.getByText("Capinha Preta Fosca")).toBeInTheDocument());
@@ -164,9 +169,15 @@ describe("App - checkout flow", () => {
 
   it("refreshes the displayed stock after a purchase is confirmed", async () => {
     vi.mocked(productsService.fetchProducts)
-      .mockResolvedValueOnce([{ id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 5, imageUrl: "", imageAlt: "" }])
-      .mockResolvedValueOnce([{ id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 4, imageUrl: "", imageAlt: "" }])
-      .mockResolvedValueOnce([{ id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 4, imageUrl: "", imageAlt: "" }]);
+      .mockResolvedValueOnce([
+        { id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 5, imageUrl: "", imageAlt: "" },
+      ])
+      .mockResolvedValueOnce([
+        { id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 4, imageUrl: "", imageAlt: "" },
+      ])
+      .mockResolvedValueOnce([
+        { id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 4, imageUrl: "", imageAlt: "" },
+      ]);
     vi.mocked(checkoutService.postCheckout).mockResolvedValue({
       statusCode: 202,
       body: { orderId: "ord_000003", status: "pending", statusUrl: "/orders/ord_000003" },

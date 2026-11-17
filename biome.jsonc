@@ -6,13 +6,19 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["backend/**", "!**/coverage", "!**/dist", "!**/node_modules"]
+    "includes": ["backend/**", "erp-mock/**", "frontend/**", "!**/coverage", "!**/dist", "!**/node_modules"]
   },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
     "lineWidth": 120
+  },
+  "css": {
+    "parser": {
+      // Tailwind v4 usa diretivas próprias (@theme, @import "tailwindcss") em frontend/src/index.css.
+      "tailwindDirectives": true
+    }
   },
   "javascript": {
     "parser": {

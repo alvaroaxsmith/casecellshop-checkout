@@ -1,6 +1,12 @@
 import express, { Request, Response } from "express";
 
-type SimulateMode = "always-success" | "always-fail" | "always-timeout" | "always-http-error" | "always-reset" | "random";
+type SimulateMode =
+  | "always-success"
+  | "always-fail"
+  | "always-timeout"
+  | "always-http-error"
+  | "always-reset"
+  | "random";
 
 // Catálogo do ERP: produto, preço e estoque contábil são dados de propriedade
 // do ERP, não da loja — a loja só lê essa base (nunca escreve aqui). Estoque

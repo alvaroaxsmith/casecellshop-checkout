@@ -62,7 +62,11 @@ describe("POST /erp/orders", () => {
 
   it("drops the connection instead of responding when mode is always-reset", async () => {
     await expect(
-      request(app).post("/erp/orders").set("X-Erp-Simulate-Mode", "always-reset").set("X-Erp-Simulate-Delay-Ms", "10").send({}),
+      request(app)
+        .post("/erp/orders")
+        .set("X-Erp-Simulate-Mode", "always-reset")
+        .set("X-Erp-Simulate-Delay-Ms", "10")
+        .send({}),
     ).rejects.toThrow();
   });
 });
