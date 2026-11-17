@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "child_process";
+import { ChildProcess, spawn } from "child_process";
 import * as path from "path";
 
 const ERP_MOCK_TEST_PORT = 4100;
@@ -22,8 +22,7 @@ async function waitForHealth(url: string, attempts = 40): Promise<void> {
     try {
       const res = await fetch(url);
       if (res.ok) return;
-    } catch {
-    }
+    } catch {}
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(

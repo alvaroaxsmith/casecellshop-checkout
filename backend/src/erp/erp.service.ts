@@ -42,7 +42,9 @@ export class ErpService {
     const delayOverride = process.env.ERP_SIM_DELAY_MS;
     const start = Date.now();
 
-    this.logger.debug(`Chamando erp-mock — url=${baseUrl}/erp/orders simMode=${mode}${delayOverride ? ` simDelayMs=${delayOverride}` : ""}`);
+    this.logger.debug(
+      `Chamando erp-mock — url=${baseUrl}/erp/orders simMode=${mode}${delayOverride ? ` simDelayMs=${delayOverride}` : ""}`,
+    );
 
     const res = await fetch(`${baseUrl}/erp/orders`, {
       method: "POST",
@@ -56,7 +58,9 @@ export class ErpService {
     const durationMs = Date.now() - start;
 
     if (!res.ok) {
-      this.logger.warn(`erp-mock respondeu com erro, tratando como falha — httpStatus=${res.status} durationMs=${durationMs}`);
+      this.logger.warn(
+        `erp-mock respondeu com erro, tratando como falha — httpStatus=${res.status} durationMs=${durationMs}`,
+      );
       return { success: false };
     }
 

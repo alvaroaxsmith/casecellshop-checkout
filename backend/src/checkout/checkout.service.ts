@@ -1,14 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ProductsService } from "../products/products.service";
-import { OrdersService } from "../orders/orders.service";
-import { IdempotencyService, CheckoutSuccessBody } from "../idempotency/idempotency.service";
-import { ErpService, ErpOutcome } from "../erp/erp.service";
-import { CheckoutDto } from "./checkout.dto";
 import {
   OutOfStockException,
   ProductNotFoundException,
   ValidationFailedException,
 } from "../common/exceptions/app.exception";
+import { ErpOutcome, ErpService } from "../erp/erp.service";
+import { CheckoutSuccessBody, IdempotencyService } from "../idempotency/idempotency.service";
+import { OrdersService } from "../orders/orders.service";
+import { ProductsService } from "../products/products.service";
+import { CheckoutDto } from "./checkout.dto";
 
 const ERP_TIMEOUT_MS = 3000;
 const MAX_ATTEMPTS = 3;
@@ -31,13 +31,17 @@ export class CheckoutService {
     this.logger.log(`Checkout recebido — ${ctx}`);
 
     if (!idempotencyKey) {
-      this.logger.warn(`Checkout rejeitado: idempotencyKey ausente (nem no body, nem no header Idempotency-Key) — ${ctx}`);
+      this.logger.warn(
+        `Checkout rejeitado: idempotencyKey ausente (nem no body, nem no header Idempotency-Key) — ${ctx}`,
+      );
       throw new ValidationFailedException("idempotencyKey é obrigatório.", "idempotencyKey");
     }
 
     const cached = this.idempotency.getStoredResponse(idempotencyKey);
     if (cached) {
-      this.logger.log(`Checkout idempotente: resposta anterior reaproveitada, nada foi reprocessado — orderId=${cached.orderId} ${ctx}`);
+      this.logger.log(
+        `Checkout idempotente: resposta anterior reaproveitada, nada foi reprocessado — orderId=${cached.orderId} ${ctx}`,
+      );
       return cached;
     }
 
@@ -57,7 +61,9 @@ export class CheckoutService {
 
     const body: CheckoutSuccessBody = { orderId: order.id, status: "pending", statusUrl: `/orders/${order.id}` };
     this.idempotency.storeResponse(idempotencyKey, body);
-    this.logger.log(`Checkout aceito, status=pending; liquidação com o ERP inicia em segundo plano — orderId=${order.id} ${ctx}`);
+    this.logger.log(
+      `Checkout aceito, status=pending; liquidação com o ERP inicia em segundo plano — orderId=${order.id} ${ctx}`,
+    );
 
     void this.settleWithErp(order.id).catch((err: unknown) => {
       // settleWithErp already turns every failure mode (including a rejected
@@ -78,7 +84,9 @@ export class CheckoutService {
     if (!order) return;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      this.logger.log(`Chamando o ERP — orderId=${orderId} attempt=${attempt}/${MAX_ATTEMPTS} timeoutMs=${ERP_TIMEOUT_MS}`);
+      this.logger.log(
+        `Chamando o ERP — orderId=${orderId} attempt=${attempt}/${MAX_ATTEMPTS} timeoutMs=${ERP_TIMEOUT_MS}`,
+      );
       let outcome: ErpOutcome;
       try {
         outcome = await Promise.race([this.erp.call(), this.timeoutAfter(ERP_TIMEOUT_MS)]);
@@ -109,7 +117,9 @@ export class CheckoutService {
       "ERP_PROCESSING_FAILED",
       "Não conseguimos concluir seu pedido agora. Tente novamente em instantes.",
     );
-    this.logger.error(`Pedido falhou definitivamente após esgotar as tentativas; estoque liberado — orderId=${orderId} attempts=${MAX_ATTEMPTS}`);
+    this.logger.error(
+      `Pedido falhou definitivamente após esgotar as tentativas; estoque liberado — orderId=${orderId} attempts=${MAX_ATTEMPTS}`,
+    );
   }
 
   private sleep(ms: number): Promise<void> {

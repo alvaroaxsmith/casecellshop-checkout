@@ -62,9 +62,7 @@ describe("POST /checkout (e2e)", () => {
   });
 
   it("rejects a request without a productId", async () => {
-    const res = await request(app.getHttpServer())
-      .post("/checkout")
-      .send({ quantity: 1, idempotencyKey: uniqueKey() });
+    const res = await request(app.getHttpServer()).post("/checkout").send({ quantity: 1, idempotencyKey: uniqueKey() });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
@@ -95,8 +93,12 @@ describe("POST /checkout (e2e)", () => {
     process.env.ERP_SIM_DELAY_MS = "10";
 
     const [resA, resB] = await Promise.all([
-      request(app.getHttpServer()).post("/checkout").send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
-      request(app.getHttpServer()).post("/checkout").send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
+      request(app.getHttpServer())
+        .post("/checkout")
+        .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
+      request(app.getHttpServer())
+        .post("/checkout")
+        .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
     ]);
 
     const statuses = [resA.status, resB.status].sort();

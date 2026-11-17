@@ -14,10 +14,7 @@ export class ProductNotFoundException extends HttpException {
 
 export class OutOfStockException extends HttpException {
   constructor() {
-    super(
-      { error: { code: "OUT_OF_STOCK", message: "Este produto está esgotado no momento." } },
-      HttpStatus.CONFLICT,
-    );
+    super({ error: { code: "OUT_OF_STOCK", message: "Este produto está esgotado no momento." } }, HttpStatus.CONFLICT);
   }
 }
 

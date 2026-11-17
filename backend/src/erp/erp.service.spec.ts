@@ -17,7 +17,9 @@ describe("ErpService", () => {
     it("returns the parsed catalog when erp-mock responds 200", async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ products: [{ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" }] }),
+        json: async () => ({
+          products: [{ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" }],
+        }),
       }) as unknown as typeof fetch;
 
       const catalog = await service.fetchCatalog();
@@ -40,7 +42,9 @@ describe("ErpService", () => {
     });
 
     it("returns whatever success flag erp-mock reports on a 200", async () => {
-      global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }) as unknown as typeof fetch;
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue({ ok: true, json: async () => ({ success: true }) }) as unknown as typeof fetch;
 
       await expect(service.call()).resolves.toEqual({ success: true });
     });

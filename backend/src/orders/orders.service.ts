@@ -34,7 +34,9 @@ export class OrdersService {
   markConfirmed(id: string): void {
     const order = this.orders.get(id);
     if (!order || order.status !== "pending") {
-      this.logger.debug(`markConfirmed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`);
+      this.logger.debug(
+        `markConfirmed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`,
+      );
       return;
     }
     order.status = "confirmed";
@@ -44,12 +46,16 @@ export class OrdersService {
   markFailed(id: string, errorCode: string, errorMessage: string): void {
     const order = this.orders.get(id);
     if (!order || order.status !== "pending") {
-      this.logger.debug(`markFailed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`);
+      this.logger.debug(
+        `markFailed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`,
+      );
       return;
     }
     order.status = "failed";
     order.errorCode = errorCode;
     order.errorMessage = errorMessage;
-    this.logger.warn(`Pedido marcado como failed — orderId=${id} status=failed errorCode=${errorCode} errorMessage="${errorMessage}"`);
+    this.logger.warn(
+      `Pedido marcado como failed — orderId=${id} status=failed errorCode=${errorCode} errorMessage="${errorMessage}"`,
+    );
   }
 }

@@ -14,7 +14,9 @@ export class IdempotencyService {
 
   getStoredResponse(key: string): CheckoutSuccessBody | undefined {
     const hit = this.store.get(key);
-    this.logger.debug(`Consulta de idempotência — idempotencyKey=${key} result=${hit ? "hit" : "miss"}${hit ? ` orderId=${hit.orderId}` : ""}`);
+    this.logger.debug(
+      `Consulta de idempotência — idempotencyKey=${key} result=${hit ? "hit" : "miss"}${hit ? ` orderId=${hit.orderId}` : ""}`,
+    );
     return hit;
   }
 

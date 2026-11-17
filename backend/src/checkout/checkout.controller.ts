@@ -1,5 +1,4 @@
 import { Body, Controller, Headers, HttpCode, Post, Req } from "@nestjs/common";
-import type { Request } from "express";
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -9,9 +8,10 @@ import {
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
-import { CheckoutService } from "./checkout.service";
-import { CheckoutDto, CheckoutAcceptedResponseDto } from "./checkout.dto";
+import type { Request } from "express";
 import { ErrorResponseDto } from "../common/dto/error-response.dto";
+import { CheckoutAcceptedResponseDto, CheckoutDto } from "./checkout.dto";
+import { CheckoutService } from "./checkout.service";
 
 @ApiTags("checkout")
 @Controller("checkout")
@@ -34,7 +34,10 @@ export class CheckoutController {
     type: CheckoutAcceptedResponseDto,
     description: "Pedido aceito: estoque já reservado, liquidação com o ERP em andamento em segundo plano.",
   })
-  @ApiBadRequestResponse({ type: ErrorResponseDto, description: "Payload inválido (productId, quantity ou idempotencyKey ausente/incorreto)." })
+  @ApiBadRequestResponse({
+    type: ErrorResponseDto,
+    description: "Payload inválido (productId, quantity ou idempotencyKey ausente/incorreto).",
+  })
   @ApiNotFoundResponse({ type: ErrorResponseDto, description: "productId não corresponde a um produto existente." })
   @ApiConflictResponse({ type: ErrorResponseDto, description: "Estoque insuficiente para a quantidade pedida." })
   checkout(@Body() dto: CheckoutDto, @Req() req: Request, @Headers("Idempotency-Key") headerKey?: string) {

@@ -1,10 +1,14 @@
 import { Logger } from "@nestjs/common";
-import { CheckoutService } from "./checkout.service";
-import { ProductsService } from "../products/products.service";
-import { OrdersService, Order } from "../orders/orders.service";
-import { IdempotencyService } from "../idempotency/idempotency.service";
+import {
+  OutOfStockException,
+  ProductNotFoundException,
+  ValidationFailedException,
+} from "../common/exceptions/app.exception";
 import { ErpService } from "../erp/erp.service";
-import { OutOfStockException, ProductNotFoundException, ValidationFailedException } from "../common/exceptions/app.exception";
+import { IdempotencyService } from "../idempotency/idempotency.service";
+import { Order, OrdersService } from "../orders/orders.service";
+import { ProductsService } from "../products/products.service";
+import { CheckoutService } from "./checkout.service";
 
 describe("CheckoutService", () => {
   let products: jest.Mocked<ProductsService>;
@@ -51,12 +55,21 @@ describe("CheckoutService", () => {
   });
 
   it("throws an out-of-stock error and marks the order failed when the reservation fails", async () => {
-    products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 0, imageUrl: "", imageAlt: "" });
+    products.findProduct.mockReturnValue({
+      id: "p1",
+      name: "P",
+      priceCents: 100,
+      stock: 0,
+      imageUrl: "",
+      imageAlt: "",
+    });
     const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
     orders.createOrder.mockReturnValue(order);
     products.reserveStock.mockReturnValue(false);
 
-    await expect(service.checkout({ productId: "p1", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(OutOfStockException);
+    await expect(service.checkout({ productId: "p1", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(
+      OutOfStockException,
+    );
     expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "OUT_OF_STOCK", expect.any(String));
   });
 
@@ -73,7 +86,14 @@ describe("CheckoutService", () => {
   it("retries three times with the documented backoff before releasing stock and marking the order failed", async () => {
     jest.useFakeTimers();
     try {
-      products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" });
+      products.findProduct.mockReturnValue({
+        id: "p1",
+        name: "P",
+        priceCents: 100,
+        stock: 1,
+        imageUrl: "",
+        imageAlt: "",
+      });
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
@@ -98,7 +118,14 @@ describe("CheckoutService", () => {
   it("treats a rejected ERP call (network failure, not just an unsuccessful response) as a failed attempt", async () => {
     jest.useFakeTimers();
     try {
-      products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" });
+      products.findProduct.mockReturnValue({
+        id: "p1",
+        name: "P",
+        priceCents: 100,
+        stock: 1,
+        imageUrl: "",
+        imageAlt: "",
+      });
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
@@ -112,7 +139,6 @@ describe("CheckoutService", () => {
       await jest.advanceTimersByTimeAsync(2000);
       await jest.advanceTimersByTimeAsync(0);
 
-
       expect(erp.call).toHaveBeenCalledTimes(3);
       expect(products.releaseReservation).toHaveBeenCalledWith("ord_1");
       expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "ERP_PROCESSING_FAILED", expect.any(String));
@@ -124,7 +150,14 @@ describe("CheckoutService", () => {
   it("confirms the order when the ERP call succeeds on the first attempt", async () => {
     jest.useFakeTimers();
     try {
-      products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" });
+      products.findProduct.mockReturnValue({
+        id: "p1",
+        name: "P",
+        priceCents: 100,
+        stock: 1,
+        imageUrl: "",
+        imageAlt: "",
+      });
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
@@ -147,7 +180,14 @@ describe("CheckoutService", () => {
     jest.useFakeTimers();
     const errorSpy = jest.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
     try {
-      products.findProduct.mockReturnValue({ id: "p1", name: "P", priceCents: 100, stock: 1, imageUrl: "", imageAlt: "" });
+      products.findProduct.mockReturnValue({
+        id: "p1",
+        name: "P",
+        priceCents: 100,
+        stock: 1,
+        imageUrl: "",
+        imageAlt: "",
+      });
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
@@ -160,7 +200,10 @@ describe("CheckoutService", () => {
       await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
       await jest.advanceTimersByTimeAsync(0);
 
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Erro inesperado em settleWithErp"), expect.any(String));
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Erro inesperado em settleWithErp"),
+        expect.any(String),
+      );
     } finally {
       errorSpy.mockRestore();
       jest.useRealTimers();
