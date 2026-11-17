@@ -18,6 +18,7 @@ export function CheckoutPanel({ quantity, onQuantityChange, onBuy, loading, canB
       <QuantityStepper value={quantity} onChange={onQuantityChange} disabled={loading} />
 
       <button
+        type="button"
         onClick={onBuy}
         disabled={loading || !canBuy}
         className={cx(
