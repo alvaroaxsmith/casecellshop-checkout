@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
+  IdempotencyKeyReusedException,
   OutOfStockException,
   ProductNotFoundException,
   ValidationFailedException,
@@ -35,12 +36,20 @@ export class CheckoutService {
       throw new ValidationFailedException("idempotencyKey é obrigatório.", "idempotencyKey");
     }
 
-    const cached = this.idempotency.getStoredResponse(idempotencyKey);
-    if (cached) {
+    // Identifica o conteúdo da compra: a mesma chave só pode repetir a mesma compra.
+    const fingerprint = `${dto.productId}:${dto.quantity}`;
+    const previous = this.idempotency.lookup(idempotencyKey, fingerprint);
+    if (previous.kind === "hit") {
       this.logger.log(
-        `Checkout idempotente: resposta anterior reaproveitada, nada foi reprocessado — orderId=${cached.orderId} ${ctx}`,
+        `Checkout idempotente: resposta anterior reaproveitada, nada foi reprocessado — orderId=${previous.response.orderId} ${ctx}`,
       );
-      return cached;
+      return previous.response;
+    }
+    if (previous.kind === "conflict") {
+      this.logger.warn(
+        `Checkout rejeitado: idempotencyKey já usada para outra compra — originalOrderId=${previous.response.orderId} ${ctx}`,
+      );
+      throw new IdempotencyKeyReusedException();
     }
 
     const product = this.products.findProduct(dto.productId);
@@ -65,7 +74,7 @@ export class CheckoutService {
     }
 
     const body: CheckoutSuccessBody = { orderId: order.id, status: "pending", statusUrl: `/orders/${order.id}` };
-    this.idempotency.storeResponse(idempotencyKey, body);
+    this.idempotency.storeResponse(idempotencyKey, fingerprint, body);
     this.logger.log(
       `Checkout aceito, status=pending; liquidação com o ERP inicia em segundo plano — orderId=${order.id} ${ctx}`,
     );

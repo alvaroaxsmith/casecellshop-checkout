@@ -1,30 +1,38 @@
 import { IdempotencyService } from "./idempotency.service";
 
+const responseA = { orderId: "ord_000001", status: "pending" as const, statusUrl: "/orders/ord_000001" };
+const responseB = { orderId: "ord_000002", status: "pending" as const, statusUrl: "/orders/ord_000002" };
+
 describe("IdempotencyService", () => {
-  it("returns undefined for a key that was never stored (miss)", () => {
+  it("returns a miss for a key that was never stored", () => {
     const service = new IdempotencyService();
 
-    expect(service.getStoredResponse("never-seen")).toBeUndefined();
+    expect(service.lookup("never-seen", "p1:1")).toEqual({ kind: "miss" });
   });
 
-  it("returns the exact stored response for a previously stored key (hit)", () => {
+  it("returns a hit with the exact stored response for the same key and the same content", () => {
     const service = new IdempotencyService();
-    const response = { orderId: "ord_000001", status: "pending" as const, statusUrl: "/orders/ord_000001" };
+    service.storeResponse("key-1", "p1:1", responseA);
 
-    service.storeResponse("key-1", response);
+    const result = service.lookup("key-1", "p1:1");
 
-    expect(service.getStoredResponse("key-1")).toBe(response);
+    expect(result.kind).toBe("hit");
+    expect(result.kind === "hit" && result.response).toBe(responseA);
+  });
+
+  it("returns a conflict when the same key arrives with different content", () => {
+    const service = new IdempotencyService();
+    service.storeResponse("key-1", "p1:1", responseA);
+
+    expect(service.lookup("key-1", "p2:1")).toEqual({ kind: "conflict", response: responseA });
   });
 
   it("keeps responses for different keys independent of each other", () => {
     const service = new IdempotencyService();
-    const responseA = { orderId: "ord_000001", status: "pending" as const, statusUrl: "/orders/ord_000001" };
-    const responseB = { orderId: "ord_000002", status: "pending" as const, statusUrl: "/orders/ord_000002" };
+    service.storeResponse("key-a", "p1:1", responseA);
+    service.storeResponse("key-b", "p1:1", responseB);
 
-    service.storeResponse("key-a", responseA);
-    service.storeResponse("key-b", responseB);
-
-    expect(service.getStoredResponse("key-a")).toBe(responseA);
-    expect(service.getStoredResponse("key-b")).toBe(responseB);
+    expect(service.lookup("key-a", "p1:1")).toEqual({ kind: "hit", response: responseA });
+    expect(service.lookup("key-b", "p1:1")).toEqual({ kind: "hit", response: responseB });
   });
 });

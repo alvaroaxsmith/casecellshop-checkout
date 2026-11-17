@@ -115,7 +115,7 @@ describe("POST /checkout (e2e)", () => {
     expect(second.status).toBe(first.status);
   });
 
-  it("ignores a mismatched payload on a repeated idempotency key and returns the original order", async () => {
+  it("rejects a repeated idempotency key that arrives with a different purchase", async () => {
     process.env.ERP_SIM_MODE = "always-success";
     process.env.ERP_SIM_DELAY_MS = "10";
     const key = uniqueKey();
@@ -127,7 +127,9 @@ describe("POST /checkout (e2e)", () => {
       .post("/checkout")
       .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: key });
 
-    expect(second.body).toEqual(first.body);
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(422);
+    expect(second.body.error.code).toBe("IDEMPOTENCY_KEY_REUSED");
   });
 
   it("accepts the idempotency key via the Idempotency-Key header instead of the body", async () => {

@@ -7,6 +7,7 @@ import {
   ApiNotFoundResponse,
   ApiOperation,
   ApiTags,
+  ApiUnprocessableEntityResponse,
 } from "@nestjs/swagger";
 import type { Request } from "express";
 import { ErrorResponseDto } from "../common/dto/error-response.dto";
@@ -23,7 +24,7 @@ export class CheckoutController {
   @ApiOperation({
     summary: "Inicia uma tentativa de compra",
     description:
-      "Reserva o estoque como uma operação síncrona e indivisível, responde imediatamente com o pedido em pending, e liquida com o ERP em segundo plano (com timeout, retry e backoff). Reenviar a mesma Idempotency-Key retorna a resposta original sem reprocessar nada.",
+      "Reserva o estoque como uma operação síncrona e indivisível, responde imediatamente com o pedido em pending, e liquida com o ERP em segundo plano (com timeout, retry e backoff). Reenviar a mesma Idempotency-Key com a mesma compra retorna a resposta original sem reprocessar nada; com uma compra diferente, retorna 422.",
   })
   @ApiHeader({
     name: "Idempotency-Key",
@@ -40,6 +41,10 @@ export class CheckoutController {
   })
   @ApiNotFoundResponse({ type: ErrorResponseDto, description: "productId não corresponde a um produto existente." })
   @ApiConflictResponse({ type: ErrorResponseDto, description: "Estoque insuficiente para a quantidade pedida." })
+  @ApiUnprocessableEntityResponse({
+    type: ErrorResponseDto,
+    description: "Idempotency-Key já usada para uma compra diferente (outro produto ou quantidade).",
+  })
   checkout(@Body() dto: CheckoutDto, @Req() req: Request, @Headers("Idempotency-Key") headerKey?: string) {
     return this.checkoutService.checkout(dto, headerKey, req.id);
   }

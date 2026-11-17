@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import {
+  IdempotencyKeyReusedException,
   OutOfStockException,
   ProductNotFoundException,
   ValidationFailedException,
@@ -34,7 +35,7 @@ describe("CheckoutService", () => {
       markFailed: jest.fn(),
     } as unknown as jest.Mocked<OrdersService>;
     idempotency = {
-      getStoredResponse: jest.fn(),
+      lookup: jest.fn().mockReturnValue({ kind: "miss" }),
       storeResponse: jest.fn(),
     } as unknown as jest.Mocked<IdempotencyService>;
     erp = { call: jest.fn() } as unknown as jest.Mocked<ErpService>;
@@ -75,11 +76,22 @@ describe("CheckoutService", () => {
 
   it("returns the cached response instead of creating a second order for a repeated key", async () => {
     const cached = { orderId: "ord_1", status: "pending" as const, statusUrl: "/orders/ord_1" };
-    idempotency.getStoredResponse.mockReturnValue(cached);
+    idempotency.lookup.mockReturnValue({ kind: "hit", response: cached });
 
     const result = await service.checkout({ productId: "p1", quantity: 1 }, "key-1");
 
     expect(result).toBe(cached);
+    expect(idempotency.lookup).toHaveBeenCalledWith("key-1", "p1:1");
+    expect(orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("rejects a repeated key that arrives with a different purchase, without creating an order", async () => {
+    const cached = { orderId: "ord_1", status: "pending" as const, statusUrl: "/orders/ord_1" };
+    idempotency.lookup.mockReturnValue({ kind: "conflict", response: cached });
+
+    await expect(service.checkout({ productId: "p2", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(
+      IdempotencyKeyReusedException,
+    );
     expect(orders.createOrder).not.toHaveBeenCalled();
   });
 

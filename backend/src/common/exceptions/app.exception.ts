@@ -23,3 +23,17 @@ export class OrderNotFoundException extends HttpException {
     super({ error: { code: "ORDER_NOT_FOUND", message: "Pedido não encontrado." } }, HttpStatus.NOT_FOUND);
   }
 }
+
+export class IdempotencyKeyReusedException extends HttpException {
+  constructor() {
+    super(
+      {
+        error: {
+          code: "IDEMPOTENCY_KEY_REUSED",
+          message: "Esta chave de idempotência já foi usada para uma compra diferente.",
+        },
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+}
