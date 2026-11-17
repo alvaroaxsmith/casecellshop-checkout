@@ -9,6 +9,7 @@ import { IdempotencyService } from "../idempotency/idempotency.service";
 import { Order, OrdersService } from "../orders/orders.service";
 import { ProductsService } from "../products/products.service";
 import { CheckoutService } from "./checkout.service";
+import { DEFAULT_SETTLEMENT_POLICY } from "./settlement-policy";
 
 describe("CheckoutService", () => {
   let products: jest.Mocked<ProductsService>;
@@ -37,7 +38,7 @@ describe("CheckoutService", () => {
       storeResponse: jest.fn(),
     } as unknown as jest.Mocked<IdempotencyService>;
     erp = { call: jest.fn() } as unknown as jest.Mocked<ErpService>;
-    service = new CheckoutService(products, orders, idempotency, erp);
+    service = new CheckoutService(products, orders, idempotency, erp, DEFAULT_SETTLEMENT_POLICY);
   });
 
   it("throws a validation error when no idempotency key is provided", async () => {

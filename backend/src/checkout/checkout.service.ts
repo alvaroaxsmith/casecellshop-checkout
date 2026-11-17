@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   OutOfStockException,
   ProductNotFoundException,
@@ -9,10 +9,7 @@ import { CheckoutSuccessBody, IdempotencyService } from "../idempotency/idempote
 import { OrdersService } from "../orders/orders.service";
 import { ProductsService } from "../products/products.service";
 import { CheckoutDto } from "./checkout.dto";
-
-const ERP_TIMEOUT_MS = 3000;
-const MAX_ATTEMPTS = 3;
-const BACKOFF_MS = [1000, 2000];
+import { SETTLEMENT_POLICY, type SettlementPolicy } from "./settlement-policy";
 
 @Injectable()
 export class CheckoutService {
@@ -23,6 +20,7 @@ export class CheckoutService {
     private readonly orders: OrdersService,
     private readonly idempotency: IdempotencyService,
     private readonly erp: ErpService,
+    @Inject(SETTLEMENT_POLICY) private readonly policy: SettlementPolicy,
   ) {}
 
   async checkout(dto: CheckoutDto, headerKey?: string, requestId?: string): Promise<CheckoutSuccessBody> {
@@ -90,30 +88,29 @@ export class CheckoutService {
     const order = this.orders.getOrder(orderId);
     if (!order) return;
 
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      this.logger.log(
-        `Chamando o ERP — orderId=${orderId} attempt=${attempt}/${MAX_ATTEMPTS} timeoutMs=${ERP_TIMEOUT_MS}`,
-      );
+    const { timeoutMs, maxAttempts, backoffMs } = this.policy;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      this.logger.log(`Chamando o ERP — orderId=${orderId} attempt=${attempt}/${maxAttempts} timeoutMs=${timeoutMs}`);
       let outcome: ErpOutcome;
       try {
-        outcome = await Promise.race([this.erp.call(), this.timeoutAfter(ERP_TIMEOUT_MS)]);
+        outcome = await this.callErpWithTimeout(timeoutMs);
       } catch (err) {
         this.logger.warn(
-          `Chamada ao ERP rejeitou (tratada como falha desta tentativa) — orderId=${orderId} attempt=${attempt}/${MAX_ATTEMPTS} reason=${err instanceof Error ? err.message : String(err)}`,
+          `Chamada ao ERP rejeitou (tratada como falha desta tentativa) — orderId=${orderId} attempt=${attempt}/${maxAttempts} reason=${err instanceof Error ? err.message : String(err)}`,
         );
         outcome = { success: false };
       }
       if (outcome.success) {
         this.products.confirmReservation(orderId);
         this.orders.markConfirmed(orderId);
-        this.logger.log(`ERP confirmou o pedido — orderId=${orderId} attempt=${attempt}/${MAX_ATTEMPTS}`);
+        this.logger.log(`ERP confirmou o pedido — orderId=${orderId} attempt=${attempt}/${maxAttempts}`);
         return;
       }
       this.logger.warn(
-        `Tentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=${orderId} attempt=${attempt}/${MAX_ATTEMPTS}`,
+        `Tentativa de liquidação falhou (ERP indisponível, lento ou recusou) — orderId=${orderId} attempt=${attempt}/${maxAttempts}`,
       );
-      if (attempt < MAX_ATTEMPTS) {
-        const backoff = BACKOFF_MS[attempt - 1] ?? 1000;
+      if (attempt < maxAttempts) {
+        const backoff = backoffMs[Math.min(attempt - 1, backoffMs.length - 1)] ?? 0;
         this.logger.log(`Aguardando antes da próxima tentativa — orderId=${orderId} backoffMs=${backoff}`);
         await this.sleep(backoff);
       }
@@ -125,7 +122,7 @@ export class CheckoutService {
       "Não conseguimos concluir seu pedido agora. Tente novamente em instantes.",
     );
     this.logger.error(
-      `Pedido falhou definitivamente após esgotar as tentativas; estoque liberado — orderId=${orderId} attempts=${MAX_ATTEMPTS}`,
+      `Pedido falhou definitivamente após esgotar as tentativas; estoque liberado — orderId=${orderId} attempts=${maxAttempts}`,
     );
   }
 
@@ -133,7 +130,16 @@ export class CheckoutService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private timeoutAfter(ms: number): Promise<{ success: false }> {
-    return new Promise((resolve) => setTimeout(() => resolve({ success: false }), ms));
+  /** Disputa a chamada ao ERP contra um timer; o timer é cancelado assim que a chamada termina. */
+  private async callErpWithTimeout(ms: number): Promise<ErpOutcome> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<ErpOutcome>((resolve) => {
+      timer = setTimeout(() => resolve({ success: false }), ms);
+    });
+    try {
+      return await Promise.race([this.erp.call(), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
