@@ -113,7 +113,7 @@ O script não inicia nem encerra nenhum programa: ele parte do princípio de que
 O ponto central do projeto é **não deixar o cliente esperando pelo ERP**. A loja separa o produto e responde na hora. A confirmação com o ERP acontece em segundo plano, e a tela vai acompanhando o andamento.
 
 1. **O cliente clica em "Comprar".** O botão muda para "Processando..." e fica bloqueado, o que impede um segundo clique.
-2. **A tela envia o pedido** ao backend (`POST /checkout`), junto com um código único daquela tentativa de compra (*chave de idempotência*). Se o mesmo código chegar de novo, a loja reconhece a repetição e devolve o pedido original em vez de criar outro.
+2. **A tela envia o pedido** ao backend (`POST /checkout`), junto com um código único daquela tentativa de compra (*chave de idempotência*). Se o mesmo código chegar de novo, a loja reconhece a repetição e devolve o pedido original em vez de criar outro. O código vale por 24 horas.
 3. **A loja confere e separa o estoque na mesma hora** (*reserva de estoque*). Se não há unidades suficientes, recusa de imediato. A conferência e a separação acontecem num único passo, sem pausa entre elas, por isso duas pessoas nunca levam a mesma última unidade.
 4. **A loja responde "pedido recebido"** com o número do pedido (*HTTP 202*, que significa "aceito, ainda em processamento"). O ERP ainda nem foi chamado.
 5. **Em segundo plano, a loja chama o ERP** para faturar o pedido. Cada tentativa tem até 3 segundos. Se falhar, a loja espera um pouco (1s, depois 2s) e tenta de novo, até 3 vezes.
@@ -182,6 +182,15 @@ Cada programa tem seus próprios testes automatizados. Ao todo, cobrem desde reg
 
 Para gerar o relatório de cobertura, use `npm run test:coverage` em cada pasta (no backend também existe `test:e2e:coverage`).
 
+**Padrão de código.** O [Biome](https://biomejs.dev) formata e revisa o código dos três programas, procurando erros comuns e problemas de acessibilidade:
+
+```bash
+npm run check       # na raiz: revisa tudo sem alterar nada
+npm run check:fix   # corrige automaticamente o que for possível
+```
+
+A mesma revisão roda sozinha antes de cada commit (um *hook* do Git, instalado pelo `npm install` da raiz). A cada push, o GitHub Actions roda a revisão, a checagem de tipos do TypeScript e os testes dos três programas ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
 <details>
 <summary>Detalhes por pasta</summary>
 
@@ -190,6 +199,7 @@ Para gerar o relatório de cobertura, use `npm run test:coverage` em cada pasta 
   - Os testes unitários (`*.spec.ts`) verificam `ProductsService`, `CheckoutService` e os demais serviços isoladamente.
   - Os testes de API (`*.e2e-spec.ts`) sobem a aplicação real e fazem requisições HTTP.
   - O `npm run test:e2e` inicia e encerra o `erp-mock` sozinho (`test/global-setup.ts` / `global-teardown.ts`), então não é preciso deixá-lo rodando antes.
+  - Os testes de API usam uma versão encurtada da regra de tentativas com o ERP: 300ms por tentativa e 100ms/200ms de espera, em vez de 3s e 1s/2s (`TEST_SETTLEMENT_POLICY` em `test/utils/create-test-app.ts`). O mecanismo é o mesmo da produção; só a escala muda, e a suíte roda em segundos.
 - **`e2e/`**:
   - Na primeira vez, rode `npm install && npx playwright install chromium`.
   - **As portas 4000, 3001 e 5173 precisam estar livres.** Encerre a loja se ela estiver rodando.
@@ -267,7 +277,7 @@ A API tem três endereços: um para ver os produtos, um para comprar e um para a
 | Endereço | Para que serve | Resposta de sucesso | Possíveis recusas |
 |---|---|---|---|
 | `GET /products` | Listar produtos | `200` com o catálogo e o estoque disponível | — |
-| `POST /checkout` | Fazer uma compra | `202` com o número do pedido | `400` dados inválidos · `404` produto inexistente · `409` sem estoque |
+| `POST /checkout` | Fazer uma compra | `202` com o número do pedido | `400` dados inválidos · `404` produto inexistente · `409` sem estoque · `422` chave de idempotência reusada para outra compra |
 | `GET /orders/:id` | Acompanhar um pedido | `200` com a situação: `pending` (em andamento), `confirmed` ou `failed` | `404` pedido inexistente |
 
 **Os quatro desfechos possíveis de uma compra**, do ponto de vista do cliente:
@@ -278,6 +288,8 @@ A API tem três endereços: um para ver os produtos, um para comprar e um para a
 | Dados inválidos | `400 VALIDATION_ERROR` | A mensagem do erro, ex.: "A quantidade deve ser maior que zero." |
 | Sem estoque | `409 OUT_OF_STOCK` | "Este produto está esgotado no momento." |
 | Falha do ERP | `202` na compra → `failed` no acompanhamento | "Não conseguimos concluir seu pedido agora. Tente novamente em instantes." |
+
+O `422` não aparece na tela da loja, porque ela gera um código novo a cada clique. Ele protege clientes da API que reaproveitem um código por engano.
 
 Se a conexão com o servidor cair, a tela mostra "Não foi possível falar com o servidor. Verifique sua conexão e tente novamente." e libera o botão para uma nova tentativa.
 
@@ -306,8 +318,9 @@ Se a conexão com o servidor cair, a tela mostra "Não foi possível falar com o
 | `400` | Produto vazio; quantidade ausente, fracionária ou menor que 1; chave de idempotência ausente |
 | `404` | O produto não existe |
 | `409` | Não há estoque disponível suficiente |
+| `422` | A chave de idempotência já foi usada para uma compra diferente (outro produto ou quantidade) |
 
-Se a mesma chave chegar de novo, a resposta é exatamente o `202` original, sem nenhuma nova verificação.
+Se a mesma chave chegar de novo **com a mesma compra**, a resposta é exatamente o `202` original, sem nenhuma nova verificação. **Com uma compra diferente**, a resposta é `422 IDEMPOTENCY_KEY_REUSED`, e nenhum pedido é criado. A chave vale por 24 horas.
 
 `GET /orders/:id` de um pedido que falhou:
 
@@ -361,6 +374,8 @@ Cada subseção abaixo resume uma decisão em uma linha. O detalhe está no bloc
 - *Idempotência* é a propriedade de uma operação poder ser repetida sem mudar o resultado.
 - Recusas (`400`, `404`, `409`) não alteram nada na loja. Repetir a mesma requisição simplesmente gera a mesma recusa de novo, então não há o que guardar.
 - Só o sucesso (`202`) altera algo: cria um pedido e separa estoque. Por isso só ele fica associado à chave. Repetir a chave devolve o pedido original, sem separar estoque em dobro.
+- Junto com a chave fica registrado *o que* foi comprado (produto e quantidade). Se a mesma chave voltar pedindo outra coisa, a loja responde `422` em vez de devolver em silêncio a confirmação de uma compra diferente da pedida. É a mesma prática de APIs de pagamento como a da Stripe.
+- Cada chave vale por **24 horas** (ADR-003), tempo de sobra para cobrir retries e cliques duplicados. Depois disso é esquecida, e a memória do backend não cresce para sempre.
 
 </details>
 
@@ -509,7 +524,7 @@ As decisões por trás de cada fase estão registradas como *ADRs* (*Architectur
 | | `main` (esta versão) | [`redis`](https://github.com/alvaroaxsmith/casecellshop-checkout/tree/redis) (Fase 1, pronta) | `redis-queue` (Fase 2, planejada) |
 |---|---|---|---|
 | Onde fica o estoque | Memória do backend | Redis, um banco em memória compartilhável, com separação atômica (ADR-002) | Igual à Fase 1 |
-| Idempotência | Memória, sem prazo | Redis, válida por 24h (ADR-003) | Igual à Fase 1 |
+| Idempotência | Memória, válida por 24h | Redis, válida por 24h (ADR-003) | Igual à Fase 1 |
 | Faturamento no ERP | Tentativas dentro do próprio backend | Igual a esta versão (ADR-004) | Fila persistente com *DLQ* (ADR-005) |
 | Se o backend reiniciar | Perde tudo | Mantém, pois os dados ficam no Redis | Mantém, num banco Postgres próprio |
 | Catálogo | Lido uma vez, ao ligar | Cópia temporária renovada a cada ~30s (*cache-aside*, ADR-001) | Igual à Fase 1 |
@@ -557,8 +572,8 @@ Gravações de uma execução real dos testes com navegador, uma por cenário, n
 
 | Suíte | Código coberto | Nº de testes |
 |---|---|---|
-| `backend` — unitários | 97,71% | 39 |
-| `backend` — API | 94,35% | 17 |
+| `backend` — unitários | 97,10% | 44 |
+| `backend` — API | 93,43% | 17 |
 | `erp-mock` | 96,96% | 9 |
 | `frontend` | 95,69% | 15 |
 
