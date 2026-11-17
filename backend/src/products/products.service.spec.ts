@@ -1,9 +1,16 @@
-import { ProductsService, Product } from "./products.service";
+import { Product, ProductsService } from "./products.service";
 
 function testCatalog(): Product[] {
   return [
     { id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 5, imageUrl: "", imageAlt: "" },
-    { id: "capinha-transparente", name: "Capinha Transparente", priceCents: 2990, stock: 10, imageUrl: "", imageAlt: "" },
+    {
+      id: "capinha-transparente",
+      name: "Capinha Transparente",
+      priceCents: 2990,
+      stock: 10,
+      imageUrl: "",
+      imageAlt: "",
+    },
     { id: "capinha-listrada", name: "Capinha Listrada", priceCents: 3490, stock: 1, imageUrl: "", imageAlt: "" },
   ];
 }

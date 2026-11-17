@@ -17,7 +17,10 @@ describe("HttpExceptionFilter", () => {
   it("passes an HttpException's own status and body straight through", () => {
     const filter = new HttpExceptionFilter();
     const { host, status, json } = fakeHost("req-1");
-    const exception = new HttpException({ error: { code: "OUT_OF_STOCK", message: "Sem estoque." } }, HttpStatus.CONFLICT);
+    const exception = new HttpException(
+      { error: { code: "OUT_OF_STOCK", message: "Sem estoque." } },
+      HttpStatus.CONFLICT,
+    );
 
     filter.catch(exception, host);
 
@@ -40,7 +43,10 @@ describe("HttpExceptionFilter", () => {
   it("still logs a well-formed line when the request carries no requestId", () => {
     const filter = new HttpExceptionFilter();
     const { host, status, json } = fakeHost(undefined);
-    const exception = new HttpException({ error: { code: "OUT_OF_STOCK", message: "Sem estoque." } }, HttpStatus.CONFLICT);
+    const exception = new HttpException(
+      { error: { code: "OUT_OF_STOCK", message: "Sem estoque." } },
+      HttpStatus.CONFLICT,
+    );
 
     expect(() => filter.catch(exception, host)).not.toThrow();
 

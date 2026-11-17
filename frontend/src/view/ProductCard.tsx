@@ -1,7 +1,7 @@
 import { Product } from "../services/products.service";
-import { productImageSrcSet, productImageUrl } from "../utils/product-images";
-import { formatCurrencyBRL } from "../utils/format";
 import { cx } from "../utils/classnames";
+import { formatCurrencyBRL } from "../utils/format";
+import { productImageSrcSet, productImageUrl } from "../utils/product-images";
 
 interface ProductCardProps {
   product: Product;

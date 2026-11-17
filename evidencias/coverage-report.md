@@ -15,7 +15,7 @@ A primeira versão deste relatório tinha 65.84% de cobertura nos testes unitár
 
 As três primeiras ganharam testes novos nos arquivos já existentes (`products.service.spec.ts`, `checkout.service.spec.ts`); a última — junto com o caminho feliz de `ErpService.call()` — ganhou um arquivo novo, `erp.service.spec.ts`. `HttpExceptionFilter` também ganhou um `http-exception.filter.spec.ts` novo. Resultado: cobertura unitária do `backend` foi de 65.84% → **81.27%** statements, com 8 testes novos (11 → 19).
 
-Depois, os modos `always-http-error`/`always-reset` do `erp-mock` (ver seção 4 de ["Demonstrando a simulação de lentidão/instabilidade do ERP"](../README.md#4-dois-modos-de-instabilidade-adicionais--always-http-error-e-always-reset) no README) ganharam dois testes e2e novos em `checkout.e2e-spec.ts`, subindo a suíte e2e de 15 para 17 testes e fechando, contra o `erp-mock` real, o `if (!res.ok)` de `ErpService.call` que antes só era exercitado com `fetch` mockado (`erp.service.ts` foi de 85.71% para **92.85%** statements na cobertura e2e).
+Depois, os modos `always-http-error`/`always-reset` do `erp-mock` (ver seção 4 de ["Demonstrando a simulação de lentidão/instabilidade do ERP"](../README.md#4-simulação-de-erp-lento-ou-instável) no README) ganharam dois testes e2e novos em `checkout.e2e-spec.ts`, subindo a suíte e2e de 15 para 17 testes e fechando, contra o `erp-mock` real, o `if (!res.ok)` de `ErpService.call` que antes só era exercitado com `fetch` mockado (`erp.service.ts` foi de 85.71% para **92.85%** statements na cobertura e2e).
 
 Numa terceira rodada, a decisão de escopo original ("só `ProductsService`/`CheckoutService` têm unitário próprio, o resto é e2e-only") foi revisitada porque valia a pena testar diretamente, e não só via HTTP, um conjunto de branches pequenas e baratas de cobrir:
 
@@ -48,8 +48,8 @@ Resultado: cobertura do `frontend` foi de 82.11% → **95.69%** statements (82.3
 
 | Suíte | Statements | Branches | Functions | Lines | Testes |
 |---|---|---|---|---|---|
-| `backend` — unitários | 97.71% | 89.18% | 92.50% | 98.97% | 39 |
-| `backend` — e2e | 94.35% | 58.62% | 98.14% | 94.75% | 17 |
+| `backend` — unitários | 97.10% | 86.76% | 90.47% | 98.63% | 44 |
+| `backend` — e2e | 93.43% | 53.08% | 98.21% | 93.67% | 17 |
 | `erp-mock` | 96.96% | 76.92% | 83.33% | 96.87% | 9 |
 | `frontend` | 95.69% | 90.76% | 80.76% | 95.69% | 15 |
 
@@ -59,77 +59,87 @@ O `backend` aparece duas vezes de propósito: os testes unitários agora cobrem 
 
 ```
 ---------------------------|---------|----------|---------|---------|-------------------
-File                       | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+File                       | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 ---------------------------|---------|----------|---------|---------|-------------------
-All files                  |   97.71 |    89.18 |    92.5 |   98.97 |
- checkout                  |   98.59 |    78.94 |     100 |     100 |
-  checkout.service.ts      |   98.59 |    78.94 |     100 |     100 | 74-92,106
- common/exceptions         |     100 |      100 |     100 |     100 |
-  app.exception.ts         |     100 |      100 |     100 |     100 |
- common/filters            |     100 |      100 |     100 |     100 |
-  http-exception.filter.ts |     100 |      100 |     100 |     100 |
- erp                       |     100 |      100 |     100 |     100 |
-  erp.service.ts           |     100 |      100 |     100 |     100 |
- idempotency               |     100 |      100 |     100 |     100 |
-  idempotency.service.ts   |     100 |      100 |     100 |     100 |
- orders                    |     100 |      100 |     100 |     100 |
-  orders.service.ts        |     100 |      100 |     100 |     100 |
- products                  |   92.85 |    81.81 |   76.92 |   95.83 |
-  products.service.ts      |   92.85 |    81.81 |   76.92 |   95.83 | 36-40
+All files                  |    97.1 |    86.76 |   90.47 |   98.63 |                   
+ checkout                  |   96.29 |    76.19 |   88.88 |   98.66 |                   
+  checkout.service.ts      |    96.2 |    76.19 |   88.88 |   98.63 | 73                
+  settlement-policy.ts     |     100 |      100 |     100 |     100 |                   
+ common/exceptions         |     100 |      100 |     100 |     100 |                   
+  app.exception.ts         |     100 |      100 |     100 |     100 |                   
+ common/filters            |     100 |      100 |     100 |     100 |                   
+  http-exception.filter.ts |     100 |      100 |     100 |     100 |                   
+ erp                       |     100 |      100 |     100 |     100 |                   
+  erp.service.ts           |     100 |      100 |     100 |     100 |                   
+ idempotency               |     100 |      100 |     100 |     100 |                   
+  idempotency.service.ts   |     100 |      100 |     100 |     100 |                   
+ orders                    |     100 |      100 |     100 |     100 |                   
+  orders.service.ts        |     100 |      100 |     100 |     100 |                   
+ products                  |   92.85 |    77.77 |   76.92 |   95.83 |                   
+  products.service.ts      |   92.85 |    77.77 |   76.92 |   95.83 | 30-34             
 ---------------------------|---------|----------|---------|---------|-------------------
 
 Test Suites: 7 passed, 7 total
-Tests:       39 passed, 39 total
+Tests:       44 passed, 44 total
+Snapshots:   0 total
+Time:        2.191 s
+Ran all test suites.
 ```
 
-`products.service.ts` 36-40 são `listProducts()`/`findProduct()` — getters triviais nunca chamados isoladamente nos unitários, só via e2e/controller; não valia a pena um teste só pra isso. `checkout.service.ts`'s poucos pontos de branch restantes (78.94%) são o fallback `BACKOFF_MS[attempt - 1] ?? 1000` (o array sempre tem entradas suficientes para as 3 tentativas documentadas, então esse `?? 1000` nunca é atingido de verdade) e o lado `instanceof Error ? err.stack : String(err)` que só dispara para uma rejeição não-`Error` — mesma classe de branch defensiva, baixo valor de perseguir mais.
+`products.service.ts` 30-34 são `listProducts()`/`findProduct()`, getters triviais nunca chamados isoladamente nos unitários, só via e2e/controller; não valia a pena um teste só para isso. `checkout.service.ts` 73 é o `throw` de invariante violada (a reserva recusada logo depois de a conferência de estoque ter passado), que por construção não acontece; os branches restantes são fallbacks defensivos do mesmo tipo (`instanceof Error ? err.stack : String(err)`, o último valor de `backoffMs` repetido quando há mais tentativas que valores).
+
+> **Atualização (2026-11-17):** as tabelas do backend foram regeradas depois de quatro mudanças de comportamento: o checkout deixou de criar pedido quando falta estoque; a política de tentativas com o ERP ficou injetável; a mesma `Idempotency-Key` com outra compra passou a responder `422`; e as chaves de idempotência passaram a expirar em 24h. Os unitários foram de 39 para 44 testes. A pequena queda percentual vem do código defensivo novo (invariante e fallbacks citados acima), não de código antes coberto que deixou de ser.
 
 ## `backend` — testes e2e (`npm run test:e2e:coverage`)
 
 ```
--------------------------------|---------|----------|---------|---------|----------------------------
-File                           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
--------------------------------|---------|----------|---------|---------|----------------------------
-All files                      |   94.35 |    58.62 |   98.14 |   94.75 |
- src                           |   95.83 |       40 |     100 |     100 |
-  app.module.ts                |     100 |      100 |     100 |     100 |
-  bootstrap.ts                 |   93.33 |       40 |     100 |     100 | 12-13
- src/checkout                  |   98.03 |    68.42 |    90.9 |    98.9 |
-  checkout.controller.ts       |     100 |      100 |     100 |     100 |
-  checkout.dto.ts               |     100 |      100 |     100 |     100 |
-  checkout.module.ts            |     100 |      100 |     100 |     100 |
-  checkout.service.ts           |   97.18 |    68.42 |   88.88 |   98.43 | 72
- src/common/dto                 |     100 |      100 |     100 |     100 |
-  error-response.dto.ts         |     100 |      100 |     100 |     100 |
- src/common/exceptions           |     100 |      100 |     100 |     100 |
-  app.exception.ts               |     100 |      100 |     100 |     100 |
- src/common/filters              |   88.23 |    44.44 |     100 |   86.66 |
-  http-exception.filter.ts       |   88.23 |    44.44 |     100 |   86.66 | 24-28
- src/common/middleware           |      95 |    83.33 |     100 |     100 |
-  request-logger.middleware.ts   |      95 |    83.33 |     100 |     100 | 28
- src/erp                         |   93.93 |       50 |     100 |    93.1 |
-  erp.module.ts                  |     100 |      100 |     100 |     100 |
-  erp.service.ts                 |   92.85 |       50 |     100 |    92.3 | 36-37
- src/idempotency                 |     100 |      100 |     100 |     100 |
-  idempotency.module.ts          |     100 |      100 |     100 |     100 |
-  idempotency.service.ts         |     100 |      100 |     100 |     100 |
- src/orders                      |   92.85 |       50 |     100 |   91.83 |
-  order.dto.ts                   |     100 |      100 |     100 |     100 |
-  orders.controller.ts           |     100 |      100 |     100 |     100 |
-  orders.module.ts               |     100 |      100 |     100 |     100 |
-  orders.service.ts              |   85.18 |       40 |     100 |      84 | 37-38,47-48
- src/products                    |   89.77 |    54.54 |     100 |   89.33 |
-  product.dto.ts                 |     100 |      100 |     100 |     100 |
-  products.controller.ts         |     100 |      100 |     100 |     100 |
-  products.module.ts             |     100 |      100 |     100 |     100 |
-  products.service.ts            |   83.92 |    54.54 |     100 |   83.33 | 54-55,81-84,99-102,125-126
--------------------------------|---------|----------|---------|---------|----------------------------
+-------------------------------|---------|----------|---------|---------|---------------------------------
+File                           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s               
+-------------------------------|---------|----------|---------|---------|---------------------------------
+All files                      |   93.43 |    53.08 |   98.21 |   93.67 |                                 
+ src                           |   95.83 |       40 |     100 |     100 |                                 
+  app.module.ts                |     100 |      100 |     100 |     100 |                                 
+  bootstrap.ts                 |   93.33 |       40 |     100 |     100 | 12-13                           
+ src/checkout                  |   97.34 |    66.66 |    90.9 |   98.05 |                                 
+  checkout.controller.ts       |     100 |      100 |     100 |     100 |                                 
+  checkout.dto.ts              |     100 |      100 |     100 |     100 |                                 
+  checkout.module.ts           |     100 |      100 |     100 |     100 |                                 
+  checkout.service.ts          |    96.2 |    66.66 |   88.88 |   97.26 | 73,87                           
+  settlement-policy.ts         |     100 |      100 |     100 |     100 |                                 
+ src/common/dto                |     100 |      100 |     100 |     100 |                                 
+  error-response.dto.ts        |     100 |      100 |     100 |     100 |                                 
+ src/common/exceptions         |     100 |      100 |     100 |     100 |                                 
+  app.exception.ts             |     100 |      100 |     100 |     100 |                                 
+ src/common/filters            |   88.23 |    44.44 |     100 |   86.66 |                                 
+  http-exception.filter.ts     |   88.23 |    44.44 |     100 |   86.66 | 24-28                           
+ src/common/middleware         |      95 |    83.33 |     100 |     100 |                                 
+  request-logger.middleware.ts |      95 |    83.33 |     100 |     100 | 20                              
+ src/erp                       |   93.93 |       50 |     100 |    93.1 |                                 
+  erp.module.ts                |     100 |      100 |     100 |     100 |                                 
+  erp.service.ts               |   92.85 |       50 |     100 |    92.3 | 30-31                           
+ src/idempotency               |    93.1 |      100 |     100 |   91.66 |                                 
+  idempotency.module.ts        |     100 |      100 |     100 |     100 |                                 
+  idempotency.service.ts       |   91.66 |      100 |     100 |   90.47 | 64-65                           
+ src/orders                    |   92.59 |       25 |     100 |   91.48 |                                 
+  order.dto.ts                 |     100 |      100 |     100 |     100 |                                 
+  orders.controller.ts         |     100 |      100 |     100 |     100 |                                 
+  orders.module.ts             |     100 |      100 |     100 |     100 |                                 
+  orders.service.ts            |      84 |        0 |     100 |    82.6 | 44-47,56-59                     
+ src/products                  |    87.5 |    38.88 |     100 |   86.66 |                                 
+  product.dto.ts               |     100 |      100 |     100 |     100 |                                 
+  products.controller.ts       |     100 |      100 |     100 |     100 |                                 
+  products.module.ts           |     100 |      100 |     100 |     100 |                                 
+  products.service.ts          |   80.35 |    38.88 |     100 |   79.16 | 48-49,54-57,75-78,93-96,119-120 
+-------------------------------|---------|----------|---------|---------|---------------------------------
 
 Test Suites: 3 passed, 3 total
 Tests:       17 passed, 17 total
+Snapshots:   0 total
+Time:        4.251 s
+Ran all test suites.
 ```
 
-`erp.service.ts` 36-37 (o `throw` de `fetchCatalog` quando o `erp-mock` não responde no boot) e `http-exception.filter.ts` 24-28 (o fallback 500) continuam descobertos aqui de propósito — nenhum cenário e2e consegue fazer o backend falhar o boot ou lançar uma exceção não tratada sem quebrar a própria suíte; essas duas linhas só ficam cobertas pelos unitários (`erp.service.spec.ts`/`http-exception.filter.spec.ts`, ambos a 100% na rodada unitária, ver acima). As demais linhas descobertas em `orders.service.ts`/`products.service.ts` são guards contra chamar `confirmReservation`/`releaseReservation`/`markConfirmed`/`markFailed` duas vezes para o mesmo pedido — nenhum fluxo real do app faz essa segunda chamada (`CheckoutService` só chama cada um deles uma vez por tentativa), então só são alcançáveis chamando o método diretamente; ambos os pares agora têm teste unitário dedicado cobrindo exatamente isso (`products.service.spec.ts`, `orders.service.spec.ts` — o de `ProductsService` existe porque um bug real de débito duplo já aconteceu ali, ver `PROMPTS.md`).
+`erp.service.ts` 30-31 (o `throw` de `fetchCatalog` quando o `erp-mock` não responde no boot) e `http-exception.filter.ts` 24-28 (o fallback 500) continuam descobertos aqui de propósito — nenhum cenário e2e consegue fazer o backend falhar o boot ou lançar uma exceção não tratada sem quebrar a própria suíte; essas duas linhas só ficam cobertas pelos unitários (`erp.service.spec.ts`/`http-exception.filter.spec.ts`, ambos a 100% na rodada unitária, ver acima). As demais linhas descobertas em `orders.service.ts`/`products.service.ts` são guards contra chamar `confirmReservation`/`releaseReservation`/`markConfirmed`/`markFailed` duas vezes para o mesmo pedido — nenhum fluxo real do app faz essa segunda chamada (`CheckoutService` só chama cada um deles uma vez por tentativa), então só são alcançáveis chamando o método diretamente; ambos os pares agora têm teste unitário dedicado cobrindo exatamente isso (`products.service.spec.ts`, `orders.service.spec.ts` — o de `ProductsService` existe porque um bug real de débito duplo já aconteceu ali, ver `PROMPTS.md`).
 
 ## `erp-mock` (`npm run test:coverage`)
 

@@ -13,11 +13,14 @@
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
-    "strictNullChecks": true,
-    "noImplicitAny": true,
-    "strictBindCallApply": true,
     "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "strict": true
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   }
 }

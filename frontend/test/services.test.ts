@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { postCheckout } from "../src/services/checkout.service";
 import { fetchOrderStatus } from "../src/services/orders.service";
 import { fetchProducts } from "../src/services/products.service";
@@ -58,7 +58,9 @@ describe("products.service", () => {
   });
 
   it("fetches /api/products and returns the products array from the response", async () => {
-    const products = [{ id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 5, imageUrl: "", imageAlt: "" }];
+    const products = [
+      { id: "capinha-preta", name: "Capinha Preta Fosca", priceCents: 3990, stock: 5, imageUrl: "", imageAlt: "" },
+    ];
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ products }),
     });

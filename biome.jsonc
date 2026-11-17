@@ -1,0 +1,53 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["backend/**", "erp-mock/**", "frontend/**", "!**/coverage", "!**/dist", "!**/node_modules"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "css": {
+    "parser": {
+      // Tailwind v4 usa diretivas próprias (@theme, @import "tailwindcss") em frontend/src/index.css.
+      "tailwindDirectives": true
+    }
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // O Nest descobre o que injetar pelos tipos dos parâmetros do construtor
+        // (emitDecoratorMetadata). Trocar esses imports por `import type` os apaga
+        // do JavaScript gerado e quebra a injeção de dependências.
+        "useImportType": "off"
+      }
+    }
+  }
+}

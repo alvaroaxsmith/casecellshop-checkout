@@ -1,9 +1,9 @@
 import { Controller, Get, Param } from "@nestjs/common";
 import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
-import { OrdersService } from "./orders.service";
+import { ErrorResponseDto } from "../common/dto/error-response.dto";
 import { OrderNotFoundException } from "../common/exceptions/app.exception";
 import { OrderStatusResponseDto } from "./order.dto";
-import { ErrorResponseDto } from "../common/dto/error-response.dto";
+import { OrdersService } from "./orders.service";
 
 @ApiTags("orders")
 @Controller("orders")
@@ -20,11 +20,7 @@ export class OrdersController {
     if (!order) throw new OrderNotFoundException();
 
     if (order.status === "failed") {
-      return {
-        orderId: order.id,
-        status: "failed",
-        error: { code: order.errorCode!, message: order.errorMessage! },
-      };
+      return { orderId: order.id, status: "failed", error: order.error };
     }
     return { orderId: order.id, status: order.status };
   }

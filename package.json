@@ -3,9 +3,19 @@
   "private": true,
   "scripts": {
     "install:all": "npm install && npm install --prefix erp-mock && npm install --prefix backend && npm install --prefix frontend",
-    "dev": "concurrently -n erp-mock,backend,frontend -c blue,green,magenta \"npm --prefix erp-mock run dev\" \"npm --prefix backend run start:dev\" \"npm --prefix frontend run dev\""
+    "dev": "concurrently -n erp-mock,backend,frontend -c blue,green,magenta \"npm --prefix erp-mock run dev\" \"npm --prefix backend run start:dev\" \"npm --prefix frontend run dev\"",
+    "lint": "biome lint",
+    "format": "biome format --write",
+    "check": "biome check",
+    "check:fix": "biome check --write",
+    "prepare": "simple-git-hooks"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@biomejs/biome": "2.6.8",
+    "concurrently": "^9.1.0",
+    "simple-git-hooks": "2.14.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx biome check --staged --no-errors-on-unmatched"
   }
 }

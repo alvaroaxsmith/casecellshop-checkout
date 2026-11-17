@@ -1,6 +1,6 @@
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
-import { createTestApp } from "./utils/create-test-app";
+import { createTestApp, waitForSettledOrder } from "./utils/create-test-app";
 
 function uniqueKey(): string {
   return `test-${Math.random().toString(36).slice(2)}`;
@@ -34,11 +34,8 @@ describe("POST /checkout (e2e)", () => {
     expect(res.body.status).toBe("pending");
     expect(res.body.orderId).toBeDefined();
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const statusRes = await request(app.getHttpServer()).get(`/orders/${res.body.orderId}`);
-    expect(statusRes.status).toBe(200);
-    expect(statusRes.body.status).toBe("confirmed");
+    const settled = await waitForSettledOrder(app, res.body.orderId);
+    expect(settled.status).toBe("confirmed");
   });
 
   it("rejects a non-positive quantity with a validation error", async () => {
@@ -62,9 +59,7 @@ describe("POST /checkout (e2e)", () => {
   });
 
   it("rejects a request without a productId", async () => {
-    const res = await request(app.getHttpServer())
-      .post("/checkout")
-      .send({ quantity: 1, idempotencyKey: uniqueKey() });
+    const res = await request(app.getHttpServer()).post("/checkout").send({ quantity: 1, idempotencyKey: uniqueKey() });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
@@ -95,8 +90,12 @@ describe("POST /checkout (e2e)", () => {
     process.env.ERP_SIM_DELAY_MS = "10";
 
     const [resA, resB] = await Promise.all([
-      request(app.getHttpServer()).post("/checkout").send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
-      request(app.getHttpServer()).post("/checkout").send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
+      request(app.getHttpServer())
+        .post("/checkout")
+        .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
+      request(app.getHttpServer())
+        .post("/checkout")
+        .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: uniqueKey() }),
     ]);
 
     const statuses = [resA.status, resB.status].sort();
@@ -116,7 +115,7 @@ describe("POST /checkout (e2e)", () => {
     expect(second.status).toBe(first.status);
   });
 
-  it("ignores a mismatched payload on a repeated idempotency key and returns the original order", async () => {
+  it("rejects a repeated idempotency key that arrives with a different purchase", async () => {
     process.env.ERP_SIM_MODE = "always-success";
     process.env.ERP_SIM_DELAY_MS = "10";
     const key = uniqueKey();
@@ -128,7 +127,9 @@ describe("POST /checkout (e2e)", () => {
       .post("/checkout")
       .send({ productId: "capinha-listrada", quantity: 1, idempotencyKey: key });
 
-    expect(second.body).toEqual(first.body);
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(422);
+    expect(second.body.error.code).toBe("IDEMPOTENCY_KEY_REUSED");
   });
 
   it("accepts the idempotency key via the Idempotency-Key header instead of the body", async () => {
@@ -159,12 +160,10 @@ describe("POST /checkout (e2e)", () => {
 
     expect(res.status).toBe(202);
 
-    await new Promise((resolve) => setTimeout(resolve, 3100)); // 2 backoffs of 1s+2s plus margin
-
-    const statusRes = await request(app.getHttpServer()).get(`/orders/${res.body.orderId}`);
-    expect(statusRes.body.status).toBe("failed");
-    expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
-  }, 8000);
+    const settled = await waitForSettledOrder(app, res.body.orderId);
+    expect(settled.status).toBe("failed");
+    expect(settled.error?.code).toBe("ERP_PROCESSING_FAILED");
+  });
 
   it("marks the order as failed when the ERP responds with a real non-2xx HTTP status on every attempt", async () => {
     process.env.ERP_SIM_MODE = "always-http-error";
@@ -176,12 +175,10 @@ describe("POST /checkout (e2e)", () => {
 
     expect(res.status).toBe(202);
 
-    await new Promise((resolve) => setTimeout(resolve, 3100)); // 2 backoffs of 1s+2s plus margin
-
-    const statusRes = await request(app.getHttpServer()).get(`/orders/${res.body.orderId}`);
-    expect(statusRes.body.status).toBe("failed");
-    expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
-  }, 8000);
+    const settled = await waitForSettledOrder(app, res.body.orderId);
+    expect(settled.status).toBe("failed");
+    expect(settled.error?.code).toBe("ERP_PROCESSING_FAILED");
+  });
 
   it("marks the order as failed when the ERP drops the connection on every attempt (fetch rejects, not just a failed response)", async () => {
     process.env.ERP_SIM_MODE = "always-reset";
@@ -193,16 +190,14 @@ describe("POST /checkout (e2e)", () => {
 
     expect(res.status).toBe(202);
 
-    await new Promise((resolve) => setTimeout(resolve, 3100)); // 2 backoffs of 1s+2s plus margin
-
-    const statusRes = await request(app.getHttpServer()).get(`/orders/${res.body.orderId}`);
-    expect(statusRes.body.status).toBe("failed");
-    expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
-  }, 8000);
+    const settled = await waitForSettledOrder(app, res.body.orderId);
+    expect(settled.status).toBe("failed");
+    expect(settled.error?.code).toBe("ERP_PROCESSING_FAILED");
+  });
 
   it("marks the order as failed when the ERP never responds within the timeout window", async () => {
     process.env.ERP_SIM_MODE = "always-timeout";
-    process.env.ERP_SIM_DELAY_MS = "5000"; // longer than the 3s per-attempt timeout
+    process.env.ERP_SIM_DELAY_MS = "1000"; // mais que o timeout de 300ms por tentativa da TEST_SETTLEMENT_POLICY
 
     const res = await request(app.getHttpServer())
       .post("/checkout")
@@ -210,12 +205,10 @@ describe("POST /checkout (e2e)", () => {
 
     expect(res.status).toBe(202);
 
-    await new Promise((resolve) => setTimeout(resolve, 12500));
-
-    const statusRes = await request(app.getHttpServer()).get(`/orders/${res.body.orderId}`);
-    expect(statusRes.body.status).toBe("failed");
-    expect(statusRes.body.error.code).toBe("ERP_PROCESSING_FAILED");
-  }, 15000);
+    const settled = await waitForSettledOrder(app, res.body.orderId);
+    expect(settled.status).toBe("failed");
+    expect(settled.error?.code).toBe("ERP_PROCESSING_FAILED");
+  });
 
   it("under N concurrent purchases, exactly as many succeed as there is available stock", async () => {
     process.env.ERP_SIM_MODE = "always-success";

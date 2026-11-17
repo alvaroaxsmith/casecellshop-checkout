@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Biome
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx biome ci
+
+  backend:
+    name: Backend (typecheck, unitários e e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            erp-mock/package-lock.json
+      # O test:e2e do backend sobe o erp-mock como processo filho, então ele também precisa estar instalado.
+      - run: npm ci --prefix erp-mock
+      - run: npm ci --prefix backend
+      - run: npx tsc --noEmit
+        working-directory: backend
+      - run: npm test
+        working-directory: backend
+      - run: npm run test:e2e
+        working-directory: backend
+
+  erp-mock:
+    name: erp-mock (typecheck e testes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: erp-mock/package-lock.json
+      - run: npm ci --prefix erp-mock
+      - run: npx tsc --noEmit
+        working-directory: erp-mock
+      - run: npm test
+        working-directory: erp-mock
+
+  frontend:
+    name: Frontend (typecheck, testes e build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npx tsc --noEmit -p .
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend

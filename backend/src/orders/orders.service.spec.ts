@@ -44,9 +44,10 @@ describe("OrdersService", () => {
     service.markFailed(order.id, "ERP_PROCESSING_FAILED", "Não conseguimos concluir seu pedido agora.");
 
     const updated = service.getOrder(order.id);
-    expect(updated?.status).toBe("failed");
-    expect(updated?.errorCode).toBe("ERP_PROCESSING_FAILED");
-    expect(updated?.errorMessage).toBe("Não conseguimos concluir seu pedido agora.");
+    expect(updated).toMatchObject({
+      status: "failed",
+      error: { code: "ERP_PROCESSING_FAILED", message: "Não conseguimos concluir seu pedido agora." },
+    });
   });
 
   it("does not re-fail an order that already moved past pending", () => {
@@ -56,7 +57,7 @@ describe("OrdersService", () => {
 
     service.markFailed(order.id, "SOMETHING_ELSE", "should be ignored");
 
-    expect(service.getOrder(order.id)?.errorCode).toBe("ERP_PROCESSING_FAILED");
+    expect(service.getOrder(order.id)).toMatchObject({ error: { code: "ERP_PROCESSING_FAILED" } });
   });
 
   it("ignores markConfirmed/markFailed for an order id that does not exist", () => {

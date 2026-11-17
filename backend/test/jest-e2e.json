@@ -3,7 +3,9 @@
   "rootDir": "..",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
-  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
   "globalSetup": "<rootDir>/test/global-setup.ts",
   "globalTeardown": "<rootDir>/test/global-teardown.ts",
   "collectCoverageFrom": [
@@ -11,5 +13,6 @@
     "!<rootDir>/src/**/*.spec.ts",
     "!<rootDir>/src/**/*.d.ts",
     "!<rootDir>/src/main.ts"
-  ]
+  ],
+  "coverageDirectory": "<rootDir>/coverage/e2e"
 }

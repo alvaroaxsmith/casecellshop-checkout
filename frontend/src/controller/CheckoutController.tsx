@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useProducts } from "../hooks/useProducts";
 import { useCheckout } from "../hooks/useCheckout";
+import { useProducts } from "../hooks/useProducts";
+import { CheckoutPanel } from "../view/CheckoutPanel";
 import { Header } from "../view/Header";
 import { ProductGrid } from "../view/ProductGrid";
-import { CheckoutPanel } from "../view/CheckoutPanel";
 import { StatusBanner } from "../view/StatusBanner";
 
 export function CheckoutController() {
