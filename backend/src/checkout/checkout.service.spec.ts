@@ -54,7 +54,7 @@ describe("CheckoutService", () => {
     );
   });
 
-  it("throws an out-of-stock error and marks the order failed when the reservation fails", async () => {
+  it("throws an out-of-stock error without creating an order when there is not enough stock", async () => {
     products.findProduct.mockReturnValue({
       id: "p1",
       name: "P",
@@ -63,14 +63,13 @@ describe("CheckoutService", () => {
       imageUrl: "",
       imageAlt: "",
     });
-    const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
-    orders.createOrder.mockReturnValue(order);
-    products.reserveStock.mockReturnValue(false);
+    products.availableStock.mockReturnValue(0);
 
     await expect(service.checkout({ productId: "p1", quantity: 1 }, "key-1")).rejects.toBeInstanceOf(
       OutOfStockException,
     );
-    expect(orders.markFailed).toHaveBeenCalledWith("ord_1", "OUT_OF_STOCK", expect.any(String));
+    expect(orders.createOrder).not.toHaveBeenCalled();
+    expect(products.reserveStock).not.toHaveBeenCalled();
   });
 
   it("returns the cached response instead of creating a second order for a repeated key", async () => {
@@ -97,6 +96,7 @@ describe("CheckoutService", () => {
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
+      products.availableStock.mockReturnValue(1);
       products.reserveStock.mockReturnValue(true);
       erp.call.mockResolvedValue({ success: false });
 
@@ -129,6 +129,7 @@ describe("CheckoutService", () => {
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
+      products.availableStock.mockReturnValue(1);
       products.reserveStock.mockReturnValue(true);
       erp.call.mockRejectedValue(new Error("fetch failed: ECONNREFUSED"));
 
@@ -161,6 +162,7 @@ describe("CheckoutService", () => {
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
+      products.availableStock.mockReturnValue(1);
       products.reserveStock.mockReturnValue(true);
       erp.call.mockResolvedValue({ success: true });
 
@@ -191,6 +193,7 @@ describe("CheckoutService", () => {
       const order: Order = { id: "ord_1", productId: "p1", quantity: 1, status: "pending", createdAt: Date.now() };
       orders.createOrder.mockReturnValue(order);
       orders.getOrder.mockReturnValue(order);
+      products.availableStock.mockReturnValue(1);
       products.reserveStock.mockReturnValue(true);
       erp.call.mockResolvedValue({ success: true });
       products.confirmReservation.mockImplementation(() => {

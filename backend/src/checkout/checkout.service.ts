@@ -51,12 +51,19 @@ export class CheckoutService {
       throw new ProductNotFoundException();
     }
 
-    const order = this.orders.createOrder(dto.productId, dto.quantity);
-    const reserved = this.products.reserveStock(order.id, dto.productId, dto.quantity);
-    if (!reserved) {
-      this.orders.markFailed(order.id, "OUT_OF_STOCK", "Este produto está esgotado no momento.");
-      this.logger.warn(`Checkout rejeitado: sem estoque suficiente — orderId=${order.id} ${ctx}`);
+    // Conferir, criar o pedido e reservar rodam sem nenhum `await` entre si: nenhuma
+    // outra requisição se intercala, então a reserva logo abaixo nunca encontra
+    // menos estoque do que esta conferência viu. Conferir antes de criar evita
+    // deixar um pedido `failed` que o cliente (que recebeu 409) nunca vai consultar.
+    const available = this.products.availableStock(dto.productId);
+    if (available < dto.quantity) {
+      this.logger.warn(`Checkout rejeitado: sem estoque suficiente — available=${available} ${ctx}`);
       throw new OutOfStockException();
+    }
+
+    const order = this.orders.createOrder(dto.productId, dto.quantity);
+    if (!this.products.reserveStock(order.id, dto.productId, dto.quantity)) {
+      throw new Error(`Invariante violada: reserva recusada logo após a conferência de estoque — orderId=${order.id}`);
     }
 
     const body: CheckoutSuccessBody = { orderId: order.id, status: "pending", statusUrl: `/orders/${order.id}` };
