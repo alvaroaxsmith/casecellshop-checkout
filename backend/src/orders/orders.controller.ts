@@ -20,11 +20,7 @@ export class OrdersController {
     if (!order) throw new OrderNotFoundException();
 
     if (order.status === "failed") {
-      return {
-        orderId: order.id,
-        status: "failed",
-        error: { code: order.errorCode!, message: order.errorMessage! },
-      };
+      return { orderId: order.id, status: "failed", error: order.error };
     }
     return { orderId: order.id, status: order.status };
   }

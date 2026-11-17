@@ -35,7 +35,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "style": {
         // O Nest descobre o que injetar pelos tipos dos parâmetros do construtor
         // (emitDecoratorMetadata). Trocar esses imports por `import type` os apaga

@@ -2,15 +2,22 @@ import { Injectable, Logger } from "@nestjs/common";
 
 export type OrderStatus = "pending" | "confirmed" | "failed";
 
-export interface Order {
+export interface OrderError {
+  code: string;
+  message: string;
+}
+
+interface OrderBase {
   id: string;
   productId: string;
   quantity: number;
-  status: OrderStatus;
-  errorCode?: string;
-  errorMessage?: string;
   createdAt: number;
 }
+
+/** Um pedido `failed` sempre carrega o erro; os demais estados nunca carregam. */
+export type Order =
+  | (OrderBase & { status: "pending" | "confirmed" })
+  | (OrderBase & { status: "failed"; error: OrderError });
 
 @Injectable()
 export class OrdersService {
@@ -33,27 +40,25 @@ export class OrdersService {
 
   markConfirmed(id: string): void {
     const order = this.orders.get(id);
-    if (!order || order.status !== "pending") {
+    if (order?.status !== "pending") {
       this.logger.debug(
         `markConfirmed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`,
       );
       return;
     }
-    order.status = "confirmed";
+    this.orders.set(id, { ...order, status: "confirmed" });
     this.logger.log(`Pedido confirmado — orderId=${id} status=confirmed`);
   }
 
   markFailed(id: string, errorCode: string, errorMessage: string): void {
     const order = this.orders.get(id);
-    if (!order || order.status !== "pending") {
+    if (order?.status !== "pending") {
       this.logger.debug(
         `markFailed ignorado (pedido inexistente ou não está mais pending) — orderId=${id} currentStatus=${order?.status ?? "none"}`,
       );
       return;
     }
-    order.status = "failed";
-    order.errorCode = errorCode;
-    order.errorMessage = errorMessage;
+    this.orders.set(id, { ...order, status: "failed", error: { code: errorCode, message: errorMessage } });
     this.logger.warn(
       `Pedido marcado como failed — orderId=${id} status=failed errorCode=${errorCode} errorMessage="${errorMessage}"`,
     );

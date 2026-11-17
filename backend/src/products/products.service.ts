@@ -71,7 +71,7 @@ export class ProductsService {
 
   confirmReservation(orderId: string): void {
     const reservation = this.reservations.get(orderId);
-    if (!reservation || reservation.status !== "active") {
+    if (reservation?.status !== "active") {
       this.logger.debug(
         `confirmReservation ignorado (reserva inexistente ou não ativa; evita debitar estoque duas vezes) — orderId=${orderId} reservationStatus=${reservation?.status ?? "none"}`,
       );
@@ -89,7 +89,7 @@ export class ProductsService {
 
   releaseReservation(orderId: string): void {
     const reservation = this.reservations.get(orderId);
-    if (!reservation || reservation.status !== "active") {
+    if (reservation?.status !== "active") {
       this.logger.debug(
         `releaseReservation ignorado (reserva inexistente ou não ativa) — orderId=${orderId} reservationStatus=${reservation?.status ?? "none"}`,
       );
